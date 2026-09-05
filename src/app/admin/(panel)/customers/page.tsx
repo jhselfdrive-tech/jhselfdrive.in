@@ -1,0 +1,13 @@
+import Link from "next/link";
+import { ArrowRight, Search, Users } from "lucide-react";
+import { listCustomers } from "@/lib/admin/data";
+import { segmentLabels, type Segment } from "@/lib/admin/segments";
+
+export const dynamic = "force-dynamic";
+
+export default async function CustomersPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const raw = await searchParams;
+  const search = typeof raw.search === "string" ? raw.search : ""; const segment = typeof raw.segment === "string" ? raw.segment : "all";
+  const customers = await listCustomers({ search, segment });
+  return <><div className="admin-page-head"><div><span className="admin-overline">Customer intelligence</span><h1>Customers</h1><p>Repeat behaviour and valuable relationships surface automatically.</p></div></div><form className="admin-filters"><div className="admin-filter" style={{flex:"1 1 260px"}}><label htmlFor="search">Name or phone</label><input id="search" name="search" defaultValue={search} placeholder="Search customers…" style={{width:"100%"}} /></div><div className="admin-filter"><label htmlFor="segment">Segment</label><select id="segment" name="segment" defaultValue={segment}><option value="all">All segments</option>{Object.entries(segmentLabels).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></div><button className="admin-primary-button" type="submit"><Search size={14} /> Search</button></form><div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>Customer</th><th>Segments</th><th>Enquiries</th><th>Bookings</th><th>Lifetime value</th><th>Last seen</th><th></th></tr></thead><tbody>{customers.map((customer) => { const initials = (customer.full_name || "Guest").split(" ").map((part) => part[0]).join("").slice(0,2).toUpperCase(); return <tr key={customer.id}><td><div className="admin-customer-cell"><span className="admin-avatar">{initials}</span><div><strong>{customer.full_name || "Unnamed customer"}</strong><small>{customer.phone}</small></div></div></td><td>{customer.segments.map((item) => <span className={`admin-segment admin-segment-${item}`} key={item}>{segmentLabels[item as Segment]}</span>)}</td><td>{customer.enquiry_count}</td><td>{customer.booking_count}</td><td className="admin-money">₹{customer.lifetime_value.toLocaleString("en-IN")}</td><td>{new Date(customer.last_seen_at).toLocaleDateString("en-IN")}</td><td><Link className="admin-icon-button" href={`/admin/customers/${customer.id}`} aria-label="View customer"><ArrowRight size={14} /></Link></td></tr>; })}</tbody></table>{!customers.length ? <div className="admin-empty"><Users size={24} style={{margin:"0 auto 10px"}} />No customers match your filters.</div> : null}</div></>;
+}

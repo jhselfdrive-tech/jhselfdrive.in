@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@next/third-parties": "latest",
+    "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "2.89.0",
     "lucide-react": "latest",
     "next": "latest",

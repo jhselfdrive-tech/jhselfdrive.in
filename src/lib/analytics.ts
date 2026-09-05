@@ -29,4 +29,12 @@ export function track(name: EventName, props: EventProps = {}) {
   fetch("/api/track", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ events: [payload] }), keepalive: true }).catch(() => undefined);
 }
 
+export function trackOnce(name: EventName, props: EventProps = {}) {
+  if (typeof window === "undefined") return;
+  const key = `jh_once_${name}`;
+  if (window.sessionStorage.getItem(key)) return;
+  window.sessionStorage.setItem(key, "1");
+  track(name, props);
+}
+
 declare global { interface Window { gtag?: (...args: unknown[]) => void } }

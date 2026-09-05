@@ -4,11 +4,22 @@ Conversion-focused website and enquiry capture system for JH Self Drive, Ramanat
 
 ## Local setup
 
-1. Copy `.env.example` to `.env.local` and add the Supabase service-role credentials.
+1. Copy `.env.example` to `.env.local` and add the Supabase publishable and service-role credentials.
 2. Run `supabase/migrations/0001_init.sql` in the Supabase SQL editor.
 3. Install and start: `npm install && npm run dev`.
 
 The page itself renders without Supabase credentials. Form submissions and first-party analytics require them.
+
+### Admin setup
+
+Apply both database migrations in order, create an administrator in **Supabase → Authentication → Users**, then add the same lowercase email to the allowlist:
+
+```sql
+insert into public.admin_users (email, full_name)
+values ('you@example.com', 'Your Name');
+```
+
+In **Authentication → Providers → Email**, disable public user signups. Add `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` to Vercel along with the existing server variables. The private operations console is available at `/admin`.
 
 ## Before launch
 
@@ -23,4 +34,4 @@ The root `vercel.json` explicitly selects Next.js and uses `npm ci` followed by 
 
 ## Security model
 
-No Supabase key is shipped to the browser. Server code uses the service-role key; all customer-facing tables have RLS enabled with no public policy. Enquiries are protected by a honeypot, a minimum completion time and a hashed-IP rate limit of five attempts per hour.
+Only the RLS-safe Supabase publishable key is shipped to the browser for authentication. The privileged service-role key remains server-only; all customer-facing tables have RLS enabled with no public policy. Enquiries are protected by a honeypot, a minimum completion time and a hashed-IP rate limit of five attempts per hour.

@@ -4,7 +4,7 @@ import { useActionState, useEffect, useState } from "react";
 import { ArrowRight, LoaderCircle, LockKeyhole } from "lucide-react";
 import { submitEnquiry, type EnquiryState } from "@/app/actions/submit-enquiry";
 import { site } from "@/content/site";
-import { getSessionId, track } from "@/lib/analytics";
+import { getSessionId, trackOnce } from "@/lib/analytics";
 
 const initialState: EnquiryState = { ok: false };
 const today = new Date().toISOString().slice(0, 10);
@@ -36,7 +36,7 @@ export function EnquiryForm() {
         utmMedium: params.get("utm_medium") || "", utmCampaign: params.get("utm_campaign") || "",
       });
       setStarted(true);
-      track("enquiry_started", { carSlug });
+      trackOnce("enquiry_started", { carSlug });
     }
   }
 
