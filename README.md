@@ -5,14 +5,14 @@ Conversion-focused website and enquiry capture system for JH Self Drive, Ramanat
 ## Local setup
 
 1. Copy `.env.example` to `.env.local` and add the Supabase publishable and service-role credentials.
-2. Run `supabase/migrations/0001_init.sql` in the Supabase SQL editor.
+2. Run the migrations in `supabase/migrations` in numeric order in the Supabase SQL editor.
 3. Install and start: `npm install && npm run dev`.
 
 The page itself renders without Supabase credentials. Form submissions and first-party analytics require them.
 
 ### Admin setup
 
-Apply both database migrations in order, create an administrator in **Supabase → Authentication → Users**, then add the same lowercase email to the allowlist:
+Apply all database migrations in order, create an administrator in **Supabase → Authentication → Users**, then add the same lowercase email to the allowlist:
 
 ```sql
 insert into public.admin_users (email, full_name)
@@ -20,6 +20,24 @@ values ('you@example.com', 'Your Name');
 ```
 
 In **Authentication → Providers → Email**, disable public user signups. Add `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` to Vercel along with the existing server variables. The private operations console is available at `/admin`.
+
+### Fleet and availability
+
+Migration `0003_fleet.sql` adds physical vehicles, document history, maintenance blocks, exact pickup/return timestamps and the database exclusion constraint that prevents overlapping vehicle bookings. After applying it, add each real car under `/admin/fleet`. Use `/admin/calendar` for the 30-day allocation view and assign an available physical vehicle while creating or editing a booking.
+
+The availability picker is an operator convenience; PostgreSQL constraint `bookings_no_vehicle_overlap` remains the final concurrency-safe protection. Cancelled bookings release their slot immediately, and adjacent same-day handovers are allowed.
+
+### GA4 reporting access
+
+The admin console reads Google Analytics through the GA4 Data API so traffic numbers sit next to enquiries at `/admin` and `/admin/traffic`. This is separate from `NEXT_PUBLIC_GA_ID`, which only sends data to Google. One-time setup:
+
+1. In the **Google Cloud Console**, select or create a project and enable the **Google Analytics Data API**.
+2. Go to **IAM & Admin → Service Accounts**, create one (for example `ga-reader`), then **Keys → Add key → Create new key → JSON**. Copy `client_email` and `private_key` out of the downloaded file.
+3. In **GA4 → Admin → Property access management**, add that `client_email` with the **Viewer** role.
+4. In **GA4 → Admin → Property details**, copy the numeric **Property ID**. This is not the `G-XXXXXXXXXX` measurement ID.
+5. Set `GA4_PROPERTY_ID`, `GOOGLE_SERVICE_ACCOUNT_EMAIL` and `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` locally and in Vercel. Keep the private key quoted; the literal `\n` sequences are expanded at runtime.
+
+Reports are cached for 15 minutes and the realtime counter for 1 minute, so the dashboard stays well inside the free GA4 API quota. Without these variables the console still works and the traffic panels show a setup note instead.
 
 ## Before launch
 

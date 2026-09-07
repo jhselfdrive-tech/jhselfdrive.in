@@ -21,12 +21,18 @@ export type Enquiry = {
 };
 
 export type Booking = {
-  id: string; customer_id: string; enquiry_id: string | null; car_slug: string; start_date: string; end_date: string;
+  id: string; customer_id: string; enquiry_id: string | null; car_slug: string; vehicle_id: string | null;
+  start_at: string; end_at: string; start_date: string; end_date: string;
   amount_total: number; deposit: number; deposit_returned: boolean; status: BookingStatus; notes: string | null;
   created_by: string; created_at: string; customer: { id: string; full_name: string | null; phone: string } | null;
+  vehicle: { id: string; registration_number: string; display_name: string | null } | null;
 };
 
 function asNumber(value: unknown) { return Number(value || 0); }
+
+function isFleetSchemaMissing(error: { code?: string } | null) {
+  return Boolean(error && ["PGRST200", "PGRST205", "42703", "42P01"].includes(error.code || ""));
+}
 
 function mapCustomer(row: Record<string, unknown>): CustomerSummary {
   const stats = {
@@ -71,11 +77,15 @@ export async function listCustomers(filters: { search?: string; segment?: string
 export async function getCustomer(id: string) {
   await verifyAdmin();
   const admin = getSupabaseAdmin();
-  const [customerResult, enquiriesResult, bookingsResult] = await Promise.all([
+  const [customerResult, enquiriesResult, initialBookingsResult] = await Promise.all([
     admin.from("customer_stats").select("*").eq("id", id).maybeSingle(),
     admin.from("enquiries").select("id,car_slug,pickup_date,return_date,message,status,source,created_at").eq("customer_id", id).order("created_at", { ascending: false }),
-    admin.from("bookings").select("id,enquiry_id,car_slug,start_date,end_date,amount_total,deposit,deposit_returned,status,notes,created_by,created_at").eq("customer_id", id).order("created_at", { ascending: false }),
+    admin.from("bookings").select("id,enquiry_id,car_slug,vehicle_id,start_at,end_at,start_date,end_date,amount_total,deposit,deposit_returned,status,notes,created_by,created_at,vehicle:vehicles(id,registration_number,display_name)").eq("customer_id", id).order("created_at", { ascending: false }),
   ]);
+  let bookingsResult = initialBookingsResult;
+  if (isFleetSchemaMissing(initialBookingsResult.error)) {
+    bookingsResult = await admin.from("bookings").select("id,enquiry_id,car_slug,start_date,end_date,amount_total,deposit,deposit_returned,status,notes,created_by,created_at").eq("customer_id", id).order("created_at", { ascending: false }) as typeof initialBookingsResult;
+  }
   if (customerResult.error) throw customerResult.error;
   if (enquiriesResult.error) throw enquiriesResult.error;
   if (bookingsResult.error) throw bookingsResult.error;
@@ -85,9 +95,16 @@ export async function getCustomer(id: string) {
 
 export async function listBookings(filters: { status?: string } = {}) {
   await verifyAdmin();
-  let query = getSupabaseAdmin().from("bookings").select("id,customer_id,enquiry_id,car_slug,start_date,end_date,amount_total,deposit,deposit_returned,status,notes,created_by,created_at,customer:customers(id,full_name,phone)").order("start_date", { ascending: false }).limit(250);
+  let query = getSupabaseAdmin().from("bookings").select("id,customer_id,enquiry_id,car_slug,vehicle_id,start_at,end_at,start_date,end_date,amount_total,deposit,deposit_returned,status,notes,created_by,created_at,customer:customers(id,full_name,phone),vehicle:vehicles(id,registration_number,display_name)").order("start_at", { ascending: false }).limit(250);
   if (filters.status && filters.status !== "all") query = query.eq("status", filters.status);
-  const { data, error } = await query;
+  let { data, error } = await query;
+  if (isFleetSchemaMissing(error)) {
+    let fallback = getSupabaseAdmin().from("bookings").select("id,customer_id,enquiry_id,car_slug,start_date,end_date,amount_total,deposit,deposit_returned,status,notes,created_by,created_at,customer:customers(id,full_name,phone)").order("start_date", { ascending: false }).limit(250);
+    if (filters.status && filters.status !== "all") fallback = fallback.eq("status", filters.status);
+    const legacy = await fallback;
+    data = legacy.data as typeof data;
+    error = legacy.error;
+  }
   if (error) throw error;
   return (data || []) as unknown as Booking[];
 }
@@ -120,14 +137,15 @@ export async function updateCustomerNotes(id: string, notes: string) {
 }
 
 export async function createBooking(input: {
-  enquiryId?: string; customerId?: string; carSlug: string; startDate: string; endDate: string;
+  enquiryId?: string; customerId?: string; carSlug: string; vehicleId?: string; startAt: string; endAt: string;
   amountTotal: number; deposit: number; status: BookingStatus; notes: string;
 }) {
   const adminUser = await verifyAdmin();
   const supabase = getSupabaseAdmin();
   if (input.enquiryId) {
     const { data, error } = await supabase.rpc("create_booking_from_enquiry", {
-      p_enquiry_id: input.enquiryId, p_car_slug: input.carSlug, p_start_date: input.startDate, p_end_date: input.endDate,
+      p_enquiry_id: input.enquiryId, p_car_slug: input.carSlug, p_vehicle_id: input.vehicleId || null,
+      p_start_at: input.startAt, p_end_at: input.endAt,
       p_amount_total: input.amountTotal, p_deposit: input.deposit, p_status: input.status, p_notes: input.notes,
       p_created_by: adminUser.email,
     });
@@ -135,8 +153,18 @@ export async function createBooking(input: {
     return data as string;
   }
   if (!input.customerId) throw new Error("Customer is required");
+  if (input.vehicleId && input.status !== "cancelled") {
+    const { data: available, error: availabilityError } = await supabase.rpc("find_available_vehicles", {
+      p_category_slug: input.carSlug, p_start_at: input.startAt, p_end_at: input.endAt, p_exclude_booking_id: null,
+    });
+    if (availabilityError) throw availabilityError;
+    if (!(available || []).some((vehicle: { id: string }) => vehicle.id === input.vehicleId)) {
+      throw Object.assign(new Error("Vehicle unavailable"), { code: "VEHICLE_UNAVAILABLE" });
+    }
+  }
   const { data, error } = await supabase.from("bookings").insert({
-    customer_id: input.customerId, car_slug: input.carSlug, start_date: input.startDate, end_date: input.endDate,
+    customer_id: input.customerId, car_slug: input.carSlug, vehicle_id: input.vehicleId || null,
+    start_at: input.startAt, end_at: input.endAt,
     amount_total: input.amountTotal, deposit: input.deposit, status: input.status, notes: input.notes || null,
     created_by: adminUser.email,
   }).select("id").single();
@@ -152,11 +180,15 @@ export async function getDashboardMetrics(days = 56) {
   const weekStart = new Date(now); weekStart.setDate(now.getDate() - 7);
   const previousWeekStart = new Date(now); previousWeekStart.setDate(now.getDate() - 14);
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-  const [enquiries, bookings, events] = await Promise.all([
+  const [enquiries, initialBookings, events] = await Promise.all([
     admin.from("enquiries").select("id,car_slug,status,source,utm_source,created_at").gte("created_at", from.toISOString()),
-    admin.from("bookings").select("id,status,amount_total,start_date,created_at").gte("created_at", from.toISOString()),
+    admin.from("bookings").select("id,status,amount_total,vehicle_id,start_at,created_at,vehicle:vehicles(registration_number,display_name)").gte("created_at", from.toISOString()),
     admin.from("events").select("name,utm_source,referrer,created_at").gte("created_at", from.toISOString()),
   ]);
+  let bookings = initialBookings;
+  if (isFleetSchemaMissing(initialBookings.error)) {
+    bookings = await admin.from("bookings").select("id,status,amount_total,start_date,created_at").gte("created_at", from.toISOString()) as typeof initialBookings;
+  }
   if (enquiries.error) throw enquiries.error;
   if (bookings.error) throw bookings.error;
   if (events.error) throw events.error;
@@ -168,6 +200,15 @@ export async function getDashboardMetrics(days = 56) {
   const completed = bookingRows.filter((row) => row.status === "completed");
   const revenueThisMonth = completed.filter((row) => new Date(row.created_at) >= monthStart).reduce((sum, row) => sum + asNumber(row.amount_total), 0);
   const activeBookings = bookingRows.filter((row) => row.status === "confirmed" || row.status === "ongoing").length;
+  const vehicleRevenue = new Map<string, { label: string; value: number }>();
+  completed.forEach((row) => {
+    if (!row.vehicle_id) return;
+    const vehicle = Array.isArray(row.vehicle) ? row.vehicle[0] : row.vehicle;
+    const label = vehicle?.display_name || vehicle?.registration_number || "Assigned vehicle";
+    const current = vehicleRevenue.get(row.vehicle_id) || { label, value: 0 };
+    current.value += asNumber(row.amount_total);
+    vehicleRevenue.set(row.vehicle_id, current);
+  });
   const weekBuckets = new Map<string, number>();
   enquiryRows.forEach((row) => {
     const date = new Date(row.created_at); const day = date.getUTCDay();
@@ -201,5 +242,6 @@ export async function getDashboardMetrics(days = 56) {
     ],
     topCars: [...carCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([slug, value]) => ({ slug, value })),
     sources: [...sourceCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([label, value]) => ({ label, value })),
+    vehicleRevenue: [...vehicleRevenue.values()].sort((a, b) => b.value - a.value).slice(0, 6),
   };
 }
