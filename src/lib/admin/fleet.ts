@@ -2,6 +2,9 @@ import "server-only";
 import { getSupabaseAdmin } from "@/lib/supabase-server";
 import { verifyAdmin } from "./auth";
 import { rangesOverlap, utilisationPercentage } from "./availability";
+import { checklistGaps, type ChecklistFacts } from "./checklist";
+import { isMissingSchema } from "./schema";
+import { DOCUMENTS_BUCKET, signObjects } from "./storage";
 
 export type VehicleStatus = "active" | "maintenance" | "retired" | "sold";
 export type DocumentType = "insurance" | "fitness" | "permit" | "puc" | "road_tax";
@@ -33,6 +36,11 @@ export type VehicleDocument = {
   expires_on: string;
   notes: string | null;
   created_at: string;
+  file_path: string | null;
+  file_name: string | null;
+  file_mime: string | null;
+  file_size_bytes: number | null;
+  signedUrl?: string | null;
 };
 
 export type VehicleBlock = {
@@ -137,9 +145,11 @@ export async function getVehicle(id: string) {
   const periodStart = new Date(periodEnd.getTime() - 90 * 86_400_000);
   const counted = bookings.filter((booking) => booking.status !== "cancelled").map((booking) => ({ startAt: booking.start_at, endAt: booking.end_at }));
   const revenue = bookings.filter((booking) => booking.status === "completed").reduce((sum, booking) => sum + Number(booking.amount_total || 0), 0);
+  const documents = (documentsResult.data || []) as VehicleDocument[];
+  const signedDocuments = await signObjects(DOCUMENTS_BUCKET, documents.flatMap((document) => document.file_path ? [document.file_path] : []));
   return {
     vehicle: vehicleResult.data as Vehicle,
-    documents: (documentsResult.data || []) as VehicleDocument[],
+    documents: documents.map((document) => ({ ...document, signedUrl: document.file_path ? signedDocuments.get(document.file_path) || null : null })),
     blocks: (blocksResult.data || []) as VehicleBlock[],
     bookings,
     utilisation: utilisationPercentage(counted, periodStart, periodEnd),
@@ -161,11 +171,14 @@ export async function updateVehicle(id: string, input: VehicleInput) {
 }
 
 export async function addVehicleDocument(input: {
+  id?: string;
   vehicleId: string; docType: DocumentType; provider: string; referenceNumber: string;
   issuedOn?: string; expiresOn: string; notes: string;
+  filePath?: string; fileName?: string; fileMime?: string; fileSizeBytes?: number;
 }) {
   await verifyAdmin();
   const { error } = await getSupabaseAdmin().from("vehicle_documents").insert({
+    id: input.id,
     vehicle_id: input.vehicleId,
     doc_type: input.docType,
     provider: input.provider.trim() || null,
@@ -173,6 +186,10 @@ export async function addVehicleDocument(input: {
     issued_on: input.issuedOn || null,
     expires_on: input.expiresOn,
     notes: input.notes.trim() || null,
+    file_path: input.filePath || null,
+    file_name: input.fileName || null,
+    file_mime: input.fileMime || null,
+    file_size_bytes: input.fileSizeBytes || null,
   });
   if (error) throw error;
 }
@@ -257,11 +274,25 @@ export async function getFleetAlerts() {
   if (enquiries.error) throw enquiries.error;
   if (assignedBookings.error) throw assignedBookings.error;
   if (blocks.error) throw blocks.error;
+  const activeBookingIds = (assignedBookings.data || []).map((booking) => booking.id);
+  const [checklists, purges] = await Promise.all([
+    activeBookingIds.length ? admin.from("booking_checklist_status").select("*").in("booking_id", activeBookingIds) : Promise.resolve({ data: [], error: null }),
+    admin.from("booking_media").select("id,booking_id,purge_after").lt("purge_after", now.toISOString().slice(0, 10)).order("purge_after"),
+  ]);
+  if (checklists.error && !isMissingSchema(checklists.error)) throw checklists.error;
+  if (purges.error && !isMissingSchema(purges.error)) throw purges.error;
   const conflicts = (assignedBookings.data || []).flatMap((booking) => {
     const conflict = (blocks.data || []).find((block) => block.vehicle_id === booking.vehicle_id && rangesOverlap(booking.start_at, booking.end_at, block.start_at, block.end_at));
     if (!conflict) return [];
     const vehicle = Array.isArray(booking.vehicle) ? booking.vehicle[0] : booking.vehicle;
     return [{ bookingId: booking.id, vehicleId: booking.vehicle_id as string, registrationNumber: vehicle?.registration_number || "Vehicle", reason: conflict.reason }];
+  });
+  const checklist = (checklists.data || []).flatMap((row) => {
+    const gaps = checklistGaps(row as ChecklistFacts);
+    if (!gaps.length) return [];
+    const booking = (assignedBookings.data || []).find((item) => item.id === row.booking_id);
+    const vehicle = booking ? (Array.isArray(booking.vehicle) ? booking.vehicle[0] : booking.vehicle) : null;
+    return [{ bookingId: String(row.booking_id), label: vehicle?.registration_number || "Active booking", gaps }];
   });
   return {
     documents: (documents.data || []) as VehicleAlert[],
@@ -269,5 +300,7 @@ export async function getFleetAlerts() {
     unassigned: unassigned.data || [],
     staleEnquiries: enquiries.data || [],
     conflicts,
+    checklist,
+    overduePurges: purges.data || [],
   };
 }

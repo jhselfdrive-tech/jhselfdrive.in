@@ -1,9 +1,11 @@
-import { Check, Filter, RotateCcw } from "lucide-react";
+import Link from "next/link";
+import { AlertTriangle, Check, Filter, RotateCcw } from "lucide-react";
 import { updateBookingStatusAction } from "@/app/admin/actions/bookings";
 import { BookingForm } from "@/components/admin/BookingForm";
 import { BookingVehicleAssignment } from "@/components/admin/BookingVehicleAssignment";
 import { site } from "@/content/site";
 import { getEnquiry, listBookings } from "@/lib/admin/data";
+import { checklistGaps } from "@/lib/admin/checklist";
 
 export const dynamic = "force-dynamic";
 
@@ -27,9 +29,10 @@ export default async function BookingsPage({ searchParams }: { searchParams: Pro
       {bookings.map((booking) => {
         const initials = (booking.customer?.full_name || "Guest").split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
         const carName = site.fleet.find((car) => car.slug === booking.car_slug)?.name || booking.car_slug;
+        const gaps = checklistGaps(booking.checklist);
         return <tr key={booking.id}>
-          <td><div className="admin-customer-cell"><span className="admin-avatar">{initials}</span><div><strong>{booking.customer?.full_name || "Unnamed customer"}</strong><small>{booking.customer?.phone}</small></div></div></td>
-          <td><strong>{carName}</strong><small className="admin-table-detail">{handoverLabel(booking.start_at, booking.start_date)} → {handoverLabel(booking.end_at, booking.end_date)}</small></td>
+          <td><Link href={`/admin/bookings/${booking.id}`} className="admin-customer-cell"><span className="admin-avatar">{initials}</span><div><strong>{booking.customer?.full_name || "Unnamed customer"}</strong><small>{booking.customer?.phone}</small></div></Link></td>
+          <td><Link href={`/admin/bookings/${booking.id}`}><strong>{carName}</strong><small className="admin-table-detail">{handoverLabel(booking.start_at, booking.start_date)} → {handoverLabel(booking.end_at, booking.end_date)}</small>{gaps.length ? <small className="admin-table-warning admin-gap-warning"><AlertTriangle size={11} /> {gaps.length} checklist gap{gaps.length === 1 ? "" : "s"}</small> : null}</Link></td>
           <td><strong>{booking.vehicle?.display_name || booking.vehicle?.registration_number || "Unassigned"}</strong>{booking.vehicle ? <small className="admin-table-detail">{booking.vehicle.registration_number}</small> : <small className="admin-table-warning">Assign before pickup</small>}{booking.start_at && booking.end_at ? <details className="admin-assignment"><summary>{booking.vehicle ? "Change" : "Assign vehicle"}</summary><BookingVehicleAssignment bookingId={booking.id} categorySlug={booking.car_slug} startAt={booking.start_at} endAt={booking.end_at} vehicleId={booking.vehicle_id} /></details> : null}</td>
           <td className="admin-money">₹{Number(booking.amount_total).toLocaleString("en-IN")}</td>
           <td>₹{Number(booking.deposit).toLocaleString("en-IN")}<small className="admin-table-detail">{booking.deposit_returned ? "Returned" : "Held"}</small></td>

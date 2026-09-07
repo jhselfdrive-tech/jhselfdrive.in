@@ -15,6 +15,7 @@ export function DocumentForm({ vehicleId }: { vehicleId: string }) {
       <div className="admin-field"><label htmlFor="referenceNumber">Reference number</label><input id="referenceNumber" name="referenceNumber" /></div>
       <div className="admin-field"><label htmlFor="issuedOn">Issued on</label><input id="issuedOn" name="issuedOn" type="date" /></div>
       <div className="admin-field"><label htmlFor="expiresOn">Expires on</label><input id="expiresOn" name="expiresOn" type="date" required /></div>
+      <div className="admin-field admin-field-full"><label htmlFor="documentFile">Paper file</label><input id="documentFile" name="file" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" required /><small className="admin-field-help">PDF, JPG, PNG or WebP · maximum 12MB</small></div>
       <div className="admin-field admin-field-full"><label htmlFor="documentNotes">Notes</label><input id="documentNotes" name="notes" /></div>
     </div>
     {state.message ? <p className={state.success ? "admin-form-success" : "admin-form-error"} role="status">{state.message}</p> : null}

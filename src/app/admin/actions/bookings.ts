@@ -72,9 +72,11 @@ const statusSchema = z.object({
 export async function updateBookingStatusAction(formData: FormData) {
   const parsed = statusSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return;
-  await updateBookingStatus(parsed.data.id, parsed.data.status, parsed.data.depositReturned === "true" ? true : undefined);
+  const depositReturned = parsed.data.depositReturned === "true" ? true : parsed.data.depositReturned === "false" ? false : undefined;
+  await updateBookingStatus(parsed.data.id, parsed.data.status, depositReturned);
   revalidatePath("/admin");
   revalidatePath("/admin/bookings");
+  revalidatePath(`/admin/bookings/${parsed.data.id}`);
   revalidatePath("/admin/customers");
   revalidatePath("/admin/fleet");
   revalidatePath("/admin/calendar");

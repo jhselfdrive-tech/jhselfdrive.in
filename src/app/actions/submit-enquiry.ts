@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { site } from "@/content/site";
 import { getSupabaseAdmin } from "@/lib/supabase-server";
 import { enquirySchema } from "@/lib/validation";
+import { businessWhatsAppUrl } from "@/lib/messages/whatsapp";
 
 export type EnquiryState = {
   ok: boolean;
@@ -62,7 +63,7 @@ export async function submitEnquiry(_: EnquiryState, formData: FormData): Promis
 
     const car = site.fleet.find((item) => item.slug === data.carSlug)!;
     const message = [`Hi ${site.name}, I just sent an enquiry.`, `Name: ${data.fullName}`, `Car: ${car.name}`, `Dates: ${isoDate(data.pickupDate)} to ${isoDate(data.returnDate)}`, data.message ? `Note: ${data.message}` : ""].filter(Boolean).join("\n");
-    return { ok: true, whatsappUrl: `https://wa.me/${site.whatsappNumber}?text=${encodeURIComponent(message)}` };
+    return { ok: true, whatsappUrl: businessWhatsAppUrl(message) };
   } catch (error) {
     console.error("Enquiry submission failed", error);
     return { ok: false, message: "We could not save your enquiry. Please call or WhatsApp us directly." };

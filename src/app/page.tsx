@@ -9,6 +9,7 @@ import { StickyContactBar } from "@/components/StickyContactBar";
 import { TrackedLink } from "@/components/TrackedLink";
 import { HeroTripCard } from "@/components/HeroTripCard";
 import { LandingEnhancements } from "@/components/LandingEnhancements";
+import { businessWhatsAppUrl } from "@/lib/messages/whatsapp";
 
 export default function Home() {
   return <>
@@ -23,7 +24,7 @@ export default function Home() {
           <div className="hero-pill"><MapPin size={14} /> Self-drive cars in Ramanathapuram</div>
           <h1>Your road.<br /><span>Your time.</span></h1>
           <p className="hero-copy">Clean, reliable cars for weekend escapes, temple trips and everyday journeys. No driver, no rigid schedule—just the freedom to go.</p>
-          <div className="hero-actions"><a className="button button-primary" href="#enquire">Check availability <ArrowRight size={17} /></a><TrackedLink className="button button-secondary" href={`https://wa.me/${site.whatsappNumber}`} event="whatsapp_click" target="_blank" rel="noreferrer"><MessageCircle size={17} /> WhatsApp us</TrackedLink></div>
+          <div className="hero-actions"><a className="button button-primary" href="#enquire">Check availability <ArrowRight size={17} /></a><TrackedLink className="button button-secondary" href={businessWhatsAppUrl()} event="whatsapp_click" target="_blank" rel="noreferrer"><MessageCircle size={17} /> WhatsApp us</TrackedLink></div>
           <div className="hero-proof"><div className="proof-item"><span className="proof-icon"><Check size={14} /></span>Quick confirmation</div><div className="proof-item"><span className="proof-icon"><Check size={14} /></span>Transparent pricing</div><div className="proof-item"><span className="proof-icon"><Check size={14} /></span>Local support</div></div>
         </div><HeroTripCard /></div>
         <a className="scroll-cue" href="#fleet">Explore <ArrowDown size={15} /></a>

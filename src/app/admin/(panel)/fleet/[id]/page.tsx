@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { AlertTriangle, CalendarClock, CarFront, FileCheck2, Gauge, IndianRupee, Wrench } from "lucide-react";
+import { AlertTriangle, CalendarClock, CarFront, ExternalLink, FileCheck2, Gauge, IndianRupee, Wrench } from "lucide-react";
 import { BlockForm } from "@/components/admin/BlockForm";
 import { DocumentForm } from "@/components/admin/DocumentForm";
 import { MetricCard } from "@/components/admin/MetricCard";
@@ -36,7 +36,7 @@ export default async function VehiclePage({ params, searchParams }: { params: Pr
     </div>
     <section className="admin-card">
       <div className="admin-card-head"><div><h2>Compliance documents</h2><span className="admin-card-subtitle">Renewal history, newest expiry first</span></div></div>
-      <div className="admin-document-grid">{documents.map((document) => { const state = expiryState(document.expires_on); return <article className="admin-document-card" key={document.id}><span className={`admin-expiry-chip admin-expiry-${state.className}`}>{state.className === "expired" ? <AlertTriangle size={12} /> : <FileCheck2 size={12} />}{state.label}</span><h3>{document.doc_type.replace("_", " ")}</h3><strong>{document.reference_number || "No reference"}</strong><small>{document.provider || "Provider not recorded"}</small></article>; })}{!documents.length ? <div className="admin-empty">No documents recorded.</div> : null}</div>
+      <div className="admin-document-grid">{documents.map((document) => { const state = expiryState(document.expires_on); return <article className="admin-document-card" key={document.id}><span className={`admin-expiry-chip admin-expiry-${state.className}`}>{state.className === "expired" ? <AlertTriangle size={12} /> : <FileCheck2 size={12} />}{state.label}</span><h3>{document.doc_type.replace("_", " ")}</h3><strong>{document.reference_number || "No reference"}</strong><small>{document.provider || "Provider not recorded"}</small>{document.signedUrl ? <a className="admin-card-link" href={document.signedUrl} target="_blank" rel="noreferrer"><ExternalLink size={12} /> View file</a> : <small className="admin-table-warning">No file uploaded</small>}</article>; })}{!documents.length ? <div className="admin-empty">No documents recorded.</div> : null}</div>
     </section>
     <div className="admin-detail-columns">
       <section className="admin-card"><div className="admin-card-head"><div><h2>Availability blocks</h2><span className="admin-card-subtitle">Maintenance and off-road periods</span></div><Wrench size={18} /></div><div className="admin-history">{blocks.map((block) => <div className="admin-history-item" key={block.id}><span className="admin-history-icon"><Wrench size={15} /></span><div><strong>{block.reason}</strong><small>{new Date(block.start_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })} → {new Date(block.end_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}</small></div></div>)}{!blocks.length ? <div className="admin-empty">No availability blocks.</div> : null}</div></section>

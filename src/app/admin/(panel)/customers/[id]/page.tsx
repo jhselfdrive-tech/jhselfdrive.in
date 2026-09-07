@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CalendarDays, CarFront, Mail, MapPin, MessageCircle, Phone } from "lucide-react";
 import { updateCustomerNotesAction } from "@/app/admin/actions/customers";
@@ -5,6 +6,7 @@ import { TagEditor } from "@/components/admin/TagEditor";
 import { site } from "@/content/site";
 import { getCustomer } from "@/lib/admin/data";
 import { segmentLabels } from "@/lib/admin/segments";
+import { whatsAppUrl } from "@/lib/messages/whatsapp";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +39,7 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
         <div>{customer.segments.map((segment) => <span className={`admin-segment admin-segment-${segment}`} key={segment}>{segmentLabels[segment]}</span>)}</div>
         <div className="admin-profile-contact">
           <a href={`tel:${customer.phone}`}><Phone size={14} /> {customer.phone}</a>
-          <a href={`https://wa.me/${customer.phone.replace(/\D/g, "")}`} target="_blank" rel="noreferrer"><MessageCircle size={14} /> Open WhatsApp</a>
+          <a href={whatsAppUrl(customer.phone)} target="_blank" rel="noreferrer"><MessageCircle size={14} /> Open WhatsApp</a>
           {customer.email ? <a href={`mailto:${customer.email}`}><Mail size={14} /> {customer.email}</a> : null}
           <span><MapPin size={14} /> {customer.city || "Ramanathapuram"}</span>
         </div>
@@ -63,11 +65,11 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
         <section className="admin-card">
           <div className="admin-card-head"><div><h2>Booking history</h2><span className="admin-card-subtitle">{bookings.length} recorded rentals</span></div></div>
           <div className="admin-history">
-            {bookings.map((booking) => <div className="admin-history-item" key={booking.id}>
+            {bookings.map((booking) => <Link href={`/admin/bookings/${booking.id}`} className="admin-history-item" key={booking.id}>
               <span className="admin-history-icon"><CarFront size={17} /></span>
               <div><strong>{site.fleet.find((car) => car.slug === booking.car_slug)?.name || booking.car_slug}</strong><small>{booking.start_date} → {booking.end_date} · {booking.status}</small></div>
               <strong className="admin-money">₹{Number(booking.amount_total).toLocaleString("en-IN")}</strong>
-            </div>)}
+            </Link>)}
             {!bookings.length ? <div className="admin-empty">No bookings yet.</div> : null}
           </div>
         </section>

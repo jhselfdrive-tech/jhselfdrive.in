@@ -7,5 +7,6 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
+  // Public rental-paper links under /r/ must remain outside this admin-only matcher.
   matcher: ["/admin/((?!login(?:/|$)).*)"],
 };

@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -11,6 +12,8 @@ import {
   findAvailableVehicles,
   updateVehicle,
 } from "@/lib/admin/fleet";
+import { DOCUMENTS_BUCKET, removeObjects, uploadObject } from "@/lib/admin/storage";
+import { DOCUMENT_LIMITS, objectKeyForDocument, validateUploads } from "@/lib/uploads/files";
 
 export type FleetActionState = { message?: string; success?: boolean };
 
@@ -67,16 +70,34 @@ const documentSchema = z.object({
 export async function addDocumentAction(_: FleetActionState, formData: FormData): Promise<FleetActionState> {
   const parsed = documentSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { message: parsed.error.issues[0]?.message || "Check the document details." };
+  const files = formData.getAll("file").filter((value): value is File => value instanceof File && value.size > 0);
+  const checked = validateUploads(files.map((file) => ({ name: file.name, size: file.size, type: file.type })), DOCUMENT_LIMITS);
+  if (!checked.ok) return { message: checked.errors[0] };
+  const file = files[0];
+  const documentId = randomUUID();
+  const filePath = objectKeyForDocument(parsed.data.vehicleId, documentId, file.type);
+  let uploaded = false;
   try {
-    await addVehicleDocument({ ...parsed.data, issuedOn: parsed.data.issuedOn || undefined });
+    await uploadObject(DOCUMENTS_BUCKET, filePath, await file.arrayBuffer(), file.type);
+    uploaded = true;
+    await addVehicleDocument({
+      ...parsed.data,
+      id: documentId,
+      issuedOn: parsed.data.issuedOn || undefined,
+      filePath,
+      fileName: file.name,
+      fileMime: file.type,
+      fileSizeBytes: file.size,
+    });
   } catch (error) {
+    if (uploaded) await removeObjects(DOCUMENTS_BUCKET, [filePath]).catch(() => undefined);
     console.error("Document save failed", error);
     return { message: "Could not save the document." };
   }
   revalidatePath("/admin");
   revalidatePath("/admin/fleet");
   revalidatePath(`/admin/fleet/${parsed.data.vehicleId}`);
-  return { success: true, message: "Document added." };
+  return { success: true, message: "Document and file added." };
 }
 
 const localDateTime = z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/, "Enter a valid start and end time");
@@ -162,6 +183,7 @@ export async function assignVehicleAction(_: FleetActionState, formData: FormDat
   }
   revalidatePath("/admin");
   revalidatePath("/admin/bookings");
+  revalidatePath(`/admin/bookings/${parsed.data.bookingId}`);
   revalidatePath("/admin/fleet");
   revalidatePath("/admin/calendar");
   return { success: true, message: "Vehicle assignment saved." };

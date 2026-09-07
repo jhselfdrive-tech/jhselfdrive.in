@@ -27,6 +27,12 @@ Migration `0003_fleet.sql` adds physical vehicles, document history, maintenance
 
 The availability picker is an operator convenience; PostgreSQL constraint `bookings_no_vehicle_overlap` remains the final concurrency-safe protection. Cancelled bookings release their slot immediately, and adjacent same-day handovers are allowed.
 
+### Handovers, customer messages and vehicle papers
+
+Migration `0004_handovers.sql` adds delivery/return checklists, private uploads and expiring customer paper links. Apply it in the Supabase SQL editor, then upload each vehicle's current compliance files under `/admin/fleet`. Booking operations are available from each row under `/admin/bookings`.
+
+The `rental-documents` and `rental-identity` buckets are private by design. Do not create authenticated or anonymous Storage policies: admin reads pass through server-side allowlist verification, customer document links are revalidated and signed for 10 minutes, and licence files require an explicit admin reveal with a 60-second URL. Licence and condition files default to purge 90 days after the rental ends; overdue files appear on the admin dashboard with a manual purge action.
+
 ### GA4 reporting access
 
 The admin console reads Google Analytics through the GA4 Data API so traffic numbers sit next to enquiries at `/admin` and `/admin/traffic`. This is separate from `NEXT_PUBLIC_GA_ID`, which only sends data to Google. One-time setup:

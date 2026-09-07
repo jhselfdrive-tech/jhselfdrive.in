@@ -2,6 +2,8 @@ import "server-only";
 import { getSupabaseAdmin } from "@/lib/supabase-server";
 import { verifyAdmin } from "./auth";
 import { deriveSegments, type Segment } from "./segments";
+import { isMissingSchema } from "./schema";
+import type { ChecklistFacts } from "./checklist";
 
 export type EnquiryStatus = "new" | "contacted" | "converted" | "lost";
 export type BookingStatus = "confirmed" | "ongoing" | "completed" | "cancelled";
@@ -26,13 +28,10 @@ export type Booking = {
   amount_total: number; deposit: number; deposit_returned: boolean; status: BookingStatus; notes: string | null;
   created_by: string; created_at: string; customer: { id: string; full_name: string | null; phone: string } | null;
   vehicle: { id: string; registration_number: string; display_name: string | null } | null;
+  checklist?: ChecklistFacts;
 };
 
 function asNumber(value: unknown) { return Number(value || 0); }
-
-function isFleetSchemaMissing(error: { code?: string } | null) {
-  return Boolean(error && ["PGRST200", "PGRST205", "42703", "42P01"].includes(error.code || ""));
-}
 
 function mapCustomer(row: Record<string, unknown>): CustomerSummary {
   const stats = {
@@ -83,7 +82,7 @@ export async function getCustomer(id: string) {
     admin.from("bookings").select("id,enquiry_id,car_slug,vehicle_id,start_at,end_at,start_date,end_date,amount_total,deposit,deposit_returned,status,notes,created_by,created_at,vehicle:vehicles(id,registration_number,display_name)").eq("customer_id", id).order("created_at", { ascending: false }),
   ]);
   let bookingsResult = initialBookingsResult;
-  if (isFleetSchemaMissing(initialBookingsResult.error)) {
+  if (isMissingSchema(initialBookingsResult.error)) {
     bookingsResult = await admin.from("bookings").select("id,enquiry_id,car_slug,start_date,end_date,amount_total,deposit,deposit_returned,status,notes,created_by,created_at").eq("customer_id", id).order("created_at", { ascending: false }) as typeof initialBookingsResult;
   }
   if (customerResult.error) throw customerResult.error;
@@ -98,7 +97,7 @@ export async function listBookings(filters: { status?: string } = {}) {
   let query = getSupabaseAdmin().from("bookings").select("id,customer_id,enquiry_id,car_slug,vehicle_id,start_at,end_at,start_date,end_date,amount_total,deposit,deposit_returned,status,notes,created_by,created_at,customer:customers(id,full_name,phone),vehicle:vehicles(id,registration_number,display_name)").order("start_at", { ascending: false }).limit(250);
   if (filters.status && filters.status !== "all") query = query.eq("status", filters.status);
   let { data, error } = await query;
-  if (isFleetSchemaMissing(error)) {
+  if (isMissingSchema(error)) {
     let fallback = getSupabaseAdmin().from("bookings").select("id,customer_id,enquiry_id,car_slug,start_date,end_date,amount_total,deposit,deposit_returned,status,notes,created_by,created_at,customer:customers(id,full_name,phone)").order("start_date", { ascending: false }).limit(250);
     if (filters.status && filters.status !== "all") fallback = fallback.eq("status", filters.status);
     const legacy = await fallback;
@@ -106,7 +105,13 @@ export async function listBookings(filters: { status?: string } = {}) {
     error = legacy.error;
   }
   if (error) throw error;
-  return (data || []) as unknown as Booking[];
+  const bookings = (data || []) as unknown as Booking[];
+  if (!bookings.length) return bookings;
+  const checklistResult = await getSupabaseAdmin().from("booking_checklist_status").select("*").in("booking_id", bookings.map((booking) => booking.id));
+  if (checklistResult.error && !isMissingSchema(checklistResult.error)) throw checklistResult.error;
+  if (checklistResult.error) return bookings;
+  const checklist = new Map((checklistResult.data || []).map((row) => [row.booking_id, row as ChecklistFacts]));
+  return bookings.map((booking) => ({ ...booking, checklist: checklist.get(booking.id) }));
 }
 
 export async function updateEnquiryStatus(id: string, status: EnquiryStatus) {
@@ -186,7 +191,7 @@ export async function getDashboardMetrics(days = 56) {
     admin.from("events").select("name,utm_source,referrer,created_at").gte("created_at", from.toISOString()),
   ]);
   let bookings = initialBookings;
-  if (isFleetSchemaMissing(initialBookings.error)) {
+  if (isMissingSchema(initialBookings.error)) {
     bookings = await admin.from("bookings").select("id,status,amount_total,start_date,created_at").gte("created_at", from.toISOString()) as typeof initialBookings;
   }
   if (enquiries.error) throw enquiries.error;
