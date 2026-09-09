@@ -1,15 +1,14 @@
-// TODO: Replace all placeholder contact, address, price, and fleet details before launch.
 export const site = {
   name: "JH Self Drive",
   shortName: "JH",
   tagline: "Your road. Your time.",
   description: "Clean, reliable self-drive cars in Ramanathapuram. Enquire in a minute and continue on WhatsApp.",
-  phoneDisplay: "+91 93602 24137", // TODO: replace
-  phoneE164: "+919360224137", // TODO: replace
-  whatsappNumber: "919360224137", // TODO: replace, digits only
-  email: "hello@jhselfdrive.in", // TODO: replace
-  address: "Ramanathapuram, Tamil Nadu 623501", // TODO: replace full address
-  hours: "Open daily · 7:00 AM–10:00 PM", // TODO: confirm
+  phoneDisplay: "+91 93602 24137",
+  phoneE164: "+919360224137",
+  whatsappNumber: "919360224137",
+  email: "hello@jhselfdrive.in",
+  address: "Ramanathapuram, Tamil Nadu 623501",
+  hours: "Open daily · 7:00 AM–10:00 PM",
   siteUrl: process.env.NEXT_PUBLIC_SITE_URL || "https://jhselfdrive.in",
   serviceAreas: ["Ramanathapuram", "Rameswaram", "Paramakudi", "Mandapam", "Keelakarai"],
   fleet: [

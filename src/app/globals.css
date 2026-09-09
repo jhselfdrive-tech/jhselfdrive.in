@@ -49,7 +49,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .hero::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(9,29,29,.94) 0%, rgba(9,29,29,.72) 38%, rgba(9,29,29,.18) 70%, rgba(9,29,29,.12) 100%), linear-gradient(0deg, rgba(9,29,29,.46), transparent 42%); }
 .hero-content { position: relative; z-index: 2; padding-top: 88px; width: min(650px, 58%); }
 .hero-pill { width: max-content; display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-radius: 999px; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.18); font-size: .78rem; font-weight: 700; backdrop-filter: blur(8px); }
-.hero h1 { margin: 24px 0 22px; font-family: Georgia, 'Times New Roman', serif; font-size: clamp(3.8rem, 7vw, 6.6rem); line-height: .88; letter-spacing: -.055em; font-weight: 500; }
+.hero h1 { margin: 24px 0 22px; font-family: Georgia, 'Times New Roman', serif; font-size: clamp(2.5rem, 5.4vw, 4.4rem); line-height: .88; letter-spacing: -.055em; font-weight: 500; }
 .hero h1 span { color: #ffc8b8; font-style: italic; }
 .hero-copy { max-width: 550px; color: rgba(255,255,255,.75); font-size: 1.08rem; line-height: 1.7; }
 .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 34px; }
@@ -202,7 +202,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
   .hero-image { object-position: 64% center; }
   .hero::after { background: linear-gradient(0deg, rgba(9,29,29,.98) 0%, rgba(9,29,29,.84) 53%, rgba(9,29,29,.28) 100%); }
   .hero-content { width: 100%; padding-top: 90px; }
-  .hero h1 { font-size: clamp(3.3rem, 17vw, 5rem); }
+  .hero h1 { font-size: clamp(2.2rem, 9.5vw, 3.1rem); }
   .hero-copy { font-size: .96rem; line-height: 1.6; }
   .hero-actions .button { flex: 1; padding-inline: 14px; }
   .hero-proof { gap: 17px; margin-top: 30px; }
@@ -313,7 +313,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 
 @media (max-width: 1000px) {
   .hero-grid { grid-template-columns: 1fr minmax(300px,.65fr); gap: 30px; }
-  .hero h1 { font-size: clamp(3.5rem, 7vw, 5.4rem); }
+  .hero h1 { font-size: clamp(2.4rem, 5.6vw, 3.8rem); }
   .experience-ribbon { grid-template-columns: repeat(2,1fr); }
 }
 @media (max-width: 740px) {
@@ -374,4 +374,69 @@ button, a { -webkit-tap-highlight-color: transparent; }
   .share-card { padding: 23px 18px; border-radius: 21px; }
   .share-window { grid-template-columns: 1fr; }
   .share-window i { width: 100%; }
+}
+
+/* ---- Sub-page chrome -------------------------------------------------------
+   .site-header is `position: absolute; color: white`, so any page that does not
+   open with a dark band renders an invisible nav. Every sub-page opens with
+   .page-hero, which uses the same palette as .how. */
+.page-hero { position: relative; padding: 132px 0 76px; background: linear-gradient(145deg, #102c2a, #0a4c46); color: white; overflow: hidden; }
+.page-hero::after { content: ""; position: absolute; right: -140px; top: -160px; width: 460px; height: 460px; border-radius: 50%; background: radial-gradient(circle, rgba(237,104,77,.22), transparent 68%); }
+.page-hero-inner { position: relative; z-index: 2; }
+.page-hero .eyebrow { color: #a7d6ce; margin-bottom: 14px; }
+.page-hero h1 { max-width: 16ch; margin: 0; font-family: Georgia, 'Times New Roman', serif; font-size: clamp(2.3rem, 4.6vw, 3.6rem); line-height: 1.02; letter-spacing: -.04em; font-weight: 500; }
+.page-hero h1 span { color: #ffc8b8; font-style: italic; }
+.page-hero-lede { max-width: 620px; margin: 20px 0 0; color: rgba(255,255,255,.76); font-size: 1.04rem; line-height: 1.7; }
+.page-hero-meta { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 28px; }
+
+.crumbs { margin-bottom: 22px; font-size: .74rem; font-weight: 700; }
+.crumbs ol { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin: 0; padding: 0; list-style: none; }
+.crumbs li { display: flex; align-items: center; gap: 7px; color: rgba(255,255,255,.5); }
+.crumbs a { color: rgba(255,255,255,.72); transition: color .2s; }
+.crumbs a:hover { color: white; }
+.crumbs [aria-current="page"] { color: #ffc8b8; }
+
+/* Long-form prose column. The rest of the site is short marketing copy; the
+   location and car pages are the first pages with real reading on them. */
+.copy-block { max-width: 720px; }
+.copy-block p { margin: 0; color: var(--muted); font-size: 1.02rem; line-height: 1.8; }
+.copy-block p + p { margin-top: 22px; }
+.copy-block .section-title { margin-top: 44px; font-size: clamp(1.5rem, 2.4vw, 2rem); }
+.copy-block .area-list { margin-top: 24px; }
+
+.tick-list { display: grid; gap: 11px; margin: 22px 0 0; padding: 0; list-style: none; }
+.tick-list li { display: flex; align-items: center; gap: 11px; color: var(--ink); font-size: .92rem; font-weight: 650; }
+.tick-list svg { flex: 0 0 auto; color: var(--teal); }
+.note-list { display: grid; gap: 13px; margin: 26px 0 0; padding: 0 0 0 20px; }
+.note-list li { color: var(--muted); font-size: .95rem; line-height: 1.7; }
+.note-list li::marker { color: var(--coral); }
+.not-ideal { display: flex; align-items: flex-start; gap: 11px; margin: 30px 0 0; padding: 17px 19px; background: #fdf1ec; border: 1px solid rgba(237,104,77,.2); border-radius: 15px; color: var(--muted); font-size: .86rem; line-height: 1.65; }
+.not-ideal svg { flex: 0 0 auto; margin-top: 2px; color: var(--coral); }
+.not-ideal strong { color: var(--ink); }
+.documents-wide { grid-template-columns: repeat(3, 1fr); align-items: stretch; }
+.documents-wide .document { align-items: flex-start; flex-direction: column; gap: 14px; }
+.experience-ribbon-auto { grid-template-columns: repeat(auto-fit, minmax(215px, 1fr)); }
+
+.car-link { display: inline-flex; align-items: center; gap: 7px; margin-top: 14px; color: var(--teal); font-size: .78rem; font-weight: 800; transition: gap .2s; }
+.car-link:hover { gap: 11px; }
+a.area-chip { transition: background .2s, border-color .2s; }
+a.area-chip:hover { background: white; border-color: rgba(13,102,93,.3); }
+
+.footer-grid { display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr; gap: 40px; padding-bottom: 34px; margin-bottom: 26px; border-bottom: 1px solid var(--line); }
+.footer-brand p { max-width: 300px; margin: 16px 0 0; color: var(--muted); font-size: .78rem; line-height: 1.65; }
+.footer-col h2 { margin: 0 0 15px; font-family: Arial, Helvetica, sans-serif; font-size: .73rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--ink); }
+.footer-col ul { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.footer-col li { color: var(--muted); font-size: .8rem; line-height: 1.5; }
+.footer-col a { transition: color .2s; }
+.footer-col a:hover { color: var(--teal); }
+
+@media (max-width: 1000px) {
+  .documents-wide { grid-template-columns: 1fr; }
+  .footer-grid { grid-template-columns: 1fr 1fr; gap: 32px; }
+}
+@media (max-width: 640px) {
+  .page-hero { padding: 104px 0 58px; }
+  .page-hero h1 { font-size: clamp(2rem, 8.2vw, 2.6rem); }
+  .page-hero-lede { font-size: .96rem; }
+  .footer-grid { grid-template-columns: 1fr; gap: 28px; }
 }

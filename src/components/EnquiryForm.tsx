@@ -3,16 +3,16 @@
 import { useActionState, useEffect, useState } from "react";
 import { ArrowRight, LoaderCircle, LockKeyhole } from "lucide-react";
 import { submitEnquiry, type EnquiryState } from "@/app/actions/submit-enquiry";
-import { site } from "@/content/site";
+import { site, type CarSlug } from "@/content/site";
 import { getSessionId, trackOnce } from "@/lib/analytics";
 
 const initialState: EnquiryState = { ok: false };
 const today = new Date().toISOString().slice(0, 10);
 
-export function EnquiryForm() {
+export function EnquiryForm({ defaultCarSlug = site.fleet[1].slug }: { defaultCarSlug?: CarSlug }) {
   const [state, formAction, pending] = useActionState(submitEnquiry, initialState);
   const [started, setStarted] = useState(false);
-  const [carSlug, setCarSlug] = useState<string>(site.fleet[1].slug);
+  const [carSlug, setCarSlug] = useState<string>(defaultCarSlug);
   const [metadata, setMetadata] = useState({ startedAt: "", sessionId: "", utmSource: "", utmMedium: "", utmCampaign: "" });
 
   useEffect(() => {
