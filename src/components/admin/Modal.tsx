@@ -1,12 +1,10 @@
 "use client";
 
-import { useEffect, useRef } from "react";
 import { X } from "lucide-react";
+import { closeOnBackdropClick, useDialogElement } from "@/components/use-dialog";
 
 /**
- * Native <dialog> in the browser's top layer, so focus trapping, Escape and
- * inertness of the page behind come for free. The admin panel had no modal
- * before this; every other disclosure uses <details>.
+ * The admin panel's only overlay — everything else here uses <details>.
  */
 export function Modal({
   open,
@@ -23,29 +21,9 @@ export function Modal({
   size?: "medium" | "large";
   children: React.ReactNode;
 }) {
-  const ref = useRef<HTMLDialogElement>(null);
+  const ref = useDialogElement(open, onClose);
 
-  useEffect(() => {
-    const dialog = ref.current;
-    if (!dialog) return;
-    if (open && !dialog.open) dialog.showModal();
-    if (!open && dialog.open) dialog.close();
-  }, [open]);
-
-  useEffect(() => {
-    const dialog = ref.current;
-    if (!dialog) return;
-    // Fires for Escape as well as dialog.close(), so state stays in sync.
-    const handleClose = () => onClose();
-    dialog.addEventListener("close", handleClose);
-    return () => dialog.removeEventListener("close", handleClose);
-  }, [onClose]);
-
-  return <dialog
-    ref={ref}
-    className={`admin-modal admin-modal-${size}`}
-    onClick={(event) => { if (event.target === ref.current) ref.current?.close(); }}
-  >
+  return <dialog ref={ref} className={`admin-modal admin-modal-${size}`} onClick={closeOnBackdropClick}>
     <div className="admin-modal-head">
       <div>
         <h2>{title}</h2>
