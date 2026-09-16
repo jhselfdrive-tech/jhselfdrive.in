@@ -2,20 +2,34 @@
 
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { z } from "zod";
 import {
   addVehicleBlock,
   addVehicleDocument,
+  addVehiclePhotos,
   assignVehicleToBooking,
   createVehicle,
+  deleteVehicle,
+  deleteVehiclePhoto,
   findAvailableVehicles,
+  reorderVehiclePhotos,
   updateVehicle,
 } from "@/lib/admin/fleet";
 import { DOCUMENTS_BUCKET, removeObjects, uploadObject } from "@/lib/admin/storage";
-import { DOCUMENT_LIMITS, objectKeyForDocument, validateUploads } from "@/lib/uploads/files";
+import { PHOTOS_BUCKET } from "@/lib/fleet/photos";
+import { DOCUMENT_LIMITS, PHOTO_LIMITS, objectKeyForDocument, objectKeyForVehiclePhoto, validateUploads } from "@/lib/uploads/files";
 
-export type FleetActionState = { message?: string; success?: boolean };
+export type FleetActionState = { message?: string; success?: boolean; vehicleId?: string };
+
+/** Revalidates every surface that renders fleet state. */
+function revalidateFleet(vehicleId?: string) {
+  revalidatePath("/admin");
+  revalidatePath("/admin/fleet");
+  if (vehicleId) revalidatePath(`/admin/fleet/${vehicleId}`);
+  revalidatePath("/admin/calendar");
+  revalidatePath("/");
+  revalidatePath("/cars");
+}
 
 const optionalInteger = z.preprocess((value) => value === "" ? undefined : value, z.coerce.number().int().nonnegative().optional());
 const vehicleSchema = z.object({
@@ -32,6 +46,13 @@ const vehicleSchema = z.object({
   odometerKm: optionalInteger,
   acquiredOn: z.union([z.literal(""), z.iso.date()]).optional().default(""),
   notes: z.string().trim().max(1500).optional().default(""),
+  dayRate: z.coerce.number().min(0, "Enter a daily rate").max(1_000_000),
+  kmRate: optionalInteger,
+  includedKmPerDay: optionalInteger,
+  deposit: z.coerce.number().min(0, "Enter a deposit").max(1_000_000),
+  tagline: z.string().trim().max(120).optional().default(""),
+  description: z.string().trim().max(1500).optional().default(""),
+  isBookable: z.preprocess((value) => value === "on" || value === "true" || value === true, z.boolean()),
 });
 
 export async function saveVehicleAction(_: FleetActionState, formData: FormData): Promise<FleetActionState> {
@@ -41,20 +62,95 @@ export async function saveVehicleAction(_: FleetActionState, formData: FormData)
   try {
     if (id) {
       await updateVehicle(id, input);
-      revalidatePath("/admin/fleet");
-      revalidatePath(`/admin/fleet/${id}`);
-      revalidatePath("/admin/calendar");
-      return { success: true, message: "Vehicle details saved." };
+      revalidateFleet(id);
+      return { success: true, message: "Vehicle details saved.", vehicleId: id };
     }
     const vehicleId = await createVehicle(input);
-    revalidatePath("/admin/fleet");
-    redirect(`/admin/fleet/${vehicleId}?created=1`);
+    revalidateFleet(vehicleId);
+    return { success: true, message: "Vehicle added. You can upload photos now.", vehicleId };
   } catch (error) {
-    if (typeof error === "object" && error && "digest" in error) throw error;
     console.error("Vehicle save failed", error);
     return { message: "Could not save this vehicle. Check that the registration number is unique." };
   }
-  return {};
+}
+
+const photoUploadSchema = z.object({ vehicleId: z.uuid() });
+
+export async function addVehiclePhotosAction(_: FleetActionState, formData: FormData): Promise<FleetActionState> {
+  const parsed = photoUploadSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { message: "Save the vehicle details before adding photos." };
+  const files = formData.getAll("photos").filter((value): value is File => value instanceof File && value.size > 0);
+  const checked = validateUploads(files.map((file) => ({ name: file.name, size: file.size, type: file.type })), PHOTO_LIMITS);
+  if (!checked.ok) return { message: checked.errors[0] };
+
+  const { vehicleId } = parsed.data;
+  const uploaded: Array<{ id: string; filePath: string; fileName: string; fileMime: string; fileSizeBytes: number }> = [];
+  try {
+    for (const file of files) {
+      const photoId = randomUUID();
+      const filePath = objectKeyForVehiclePhoto(vehicleId, photoId, file.type);
+      await uploadObject(PHOTOS_BUCKET, filePath, await file.arrayBuffer(), file.type);
+      uploaded.push({ id: photoId, filePath, fileName: file.name, fileMime: file.type, fileSizeBytes: file.size });
+    }
+    await addVehiclePhotos(vehicleId, uploaded);
+  } catch (error) {
+    if (uploaded.length) await removeObjects(PHOTOS_BUCKET, uploaded.map((photo) => photo.filePath)).catch(() => undefined);
+    console.error("Vehicle photo upload failed", error);
+    return { message: "Could not upload those photos.", vehicleId };
+  }
+  revalidateFleet(vehicleId);
+  return { success: true, message: `Added ${uploaded.length} photo${uploaded.length === 1 ? "" : "s"}.`, vehicleId };
+}
+
+const photoDeleteSchema = z.object({ photoId: z.uuid() });
+
+export async function deleteVehiclePhotoAction(_: FleetActionState, formData: FormData): Promise<FleetActionState> {
+  const parsed = photoDeleteSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { message: "Choose a photo to remove." };
+  try {
+    const vehicleId = await deleteVehiclePhoto(parsed.data.photoId);
+    revalidateFleet(vehicleId || undefined);
+    return { success: true, message: "Photo removed.", vehicleId: vehicleId || undefined };
+  } catch (error) {
+    console.error("Vehicle photo delete failed", error);
+    return { message: "Could not remove that photo." };
+  }
+}
+
+const photoReorderSchema = z.object({
+  vehicleId: z.uuid(),
+  order: z.string().min(1).transform((value) => value.split(",").filter(Boolean)),
+});
+
+export async function reorderVehiclePhotosAction(_: FleetActionState, formData: FormData): Promise<FleetActionState> {
+  const parsed = photoReorderSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { message: "Could not read the new photo order." };
+  try {
+    await reorderVehiclePhotos(parsed.data.vehicleId, parsed.data.order);
+  } catch (error) {
+    console.error("Vehicle photo reorder failed", error);
+    return { message: "Could not save the new photo order." };
+  }
+  revalidateFleet(parsed.data.vehicleId);
+  return { success: true, message: "Photo order saved.", vehicleId: parsed.data.vehicleId };
+}
+
+const vehicleDeleteSchema = z.object({ vehicleId: z.uuid() });
+
+export async function deleteVehicleAction(_: FleetActionState, formData: FormData): Promise<FleetActionState> {
+  const parsed = vehicleDeleteSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { message: "Choose a vehicle to delete." };
+  try {
+    await deleteVehicle(parsed.data.vehicleId);
+  } catch (error) {
+    console.error("Vehicle delete failed", error);
+    if (codeOf(error) === "VEHICLE_HAS_BOOKINGS") {
+      return { message: "This vehicle has booking history and cannot be deleted. Set its status to Retired instead — that removes it from availability while keeping the history." };
+    }
+    return { message: "Could not delete this vehicle." };
+  }
+  revalidateFleet();
+  return { success: true, message: "Vehicle deleted." };
 }
 
 const documentSchema = z.object({

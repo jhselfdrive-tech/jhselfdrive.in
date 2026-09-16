@@ -2,7 +2,7 @@ export const site = {
   name: "JH Self Drive",
   shortName: "JH",
   tagline: "Your road. Your time.",
-  description: "Clean, reliable self-drive cars in Ramanathapuram. Enquire in a minute and continue on WhatsApp.",
+  description: "Clean, reliable self-drive cars in Ramanathapuram. Book directly in a minute with zero upfront online payment and continue on WhatsApp.",
   phoneDisplay: "+91 93602 24137",
   phoneE164: "+919360224137",
   whatsappNumber: "919360224137",
@@ -23,11 +23,12 @@ export const site = {
     { title: "Refundable deposit", detail: "Amount confirmed before you book" },
   ],
   faq: [
-    { question: "How do I book a self-drive car?", answer: "Send an enquiry with your dates and preferred car. We will confirm availability, the final price and pickup details with you on WhatsApp." },
+    { question: "How do I book a self-drive car?", answer: "Select your dates and preferred car on our fleet booking form. Your reservation is submitted directly, and you can confirm with our team instantly on WhatsApp." },
+    { question: "Do I need to make an advance payment online?", answer: "No online payment is required. You pay the rental and refundable security deposit via UPI or cash during vehicle pickup in Ramanathapuram." },
     { question: "Is fuel included in the rental price?", answer: "Fuel is not included. You receive the car at a recorded fuel level and return it at the same level." },
-    { question: "Can I take the car outside Ramanathapuram?", answer: "Yes, subject to the agreed usage area. Tell us your route when enquiring so we can confirm any restrictions before booking." },
-    { question: "What documents do I need?", answer: "You need an original valid driving licence and Aadhaar or passport. Additional verification may be requested for safety." },
-    { question: "Can someone else drive the car?", answer: "Only verified drivers named in the rental agreement may drive. Add any second driver before pickup." },
+    { question: "Can I take the car outside Ramanathapuram?", answer: "Yes, subject to the agreed usage area. Mention your route when booking so our team can confirm any route recommendations." },
+    { question: "What documents do I need for vehicle handover?", answer: "You need an original valid driving licence and Aadhaar or passport. Verification takes only 2 minutes at pickup." },
+    { question: "Can someone else drive the car?", answer: "Only verified drivers named in the rental agreement may drive. You can add an additional driver during pickup." },
   ],
 } as const;
 

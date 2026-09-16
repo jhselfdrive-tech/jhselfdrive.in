@@ -2,7 +2,7 @@ import type { CarSlug } from "./site";
 import type { LocationFaq } from "./locations";
 
 // Long-form copy for the /cars/[slug] pages. Specs (day rate, seats, fuel, transmission)
-// deliberately stay in site.fleet — that is the single source the enquiry action and admin read.
+// deliberately stay in site.fleet — bookable cars and their live rates live in the vehicles table.
 
 export type CarContent = {
   title: string;

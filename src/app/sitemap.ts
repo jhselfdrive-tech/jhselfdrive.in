@@ -14,6 +14,7 @@ const entry = (path: string, priority: number, changeFrequency: Entry["changeFre
 export default function sitemap(): MetadataRoute.Sitemap {
   return [
     entry("/", 1, "weekly", new Date()),
+    entry("/booking", 0.9, "weekly", new Date()),
     entry("/cars", 0.8, "monthly", new Date()),
     ...site.fleet.map((car) => entry(`/cars/${car.slug}`, 0.8, "monthly", new Date(carContent[car.slug].updatedAt))),
     ...locations.map((location) => entry(`/${location.slug}`, 0.7, "monthly", new Date(location.updatedAt))),

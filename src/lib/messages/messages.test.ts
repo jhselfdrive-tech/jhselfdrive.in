@@ -33,8 +33,16 @@ describe("message templates", () => {
     amountBalance: 2000, depositAmount: 5000, shareUrl: "https://jhselfdrive.in/r/example",
   };
 
-  it("marks booking confirmation incomplete without vehicle and share link", () => {
-    expect(composeMessage("booking_confirmed", {})).toMatchObject({ isReady: false, missing: ["vehicleLabel", "shareUrl"] });
+  it("marks booking confirmation incomplete without an assigned vehicle", () => {
+    expect(composeMessage("booking_confirmed", {})).toMatchObject({ isReady: false, missing: ["vehicleLabel"] });
+  });
+
+  // A share link is often created after the car is assigned, so it must not
+  // block the approved -> confirmed message.
+  it("composes booking confirmation without a share link", () => {
+    const composed = composeMessage("booking_confirmed", { vehicleLabel: "White Brezza · TN65AB1234" });
+    expect(composed.isReady).toBe(true);
+    expect(composed.body).not.toContain("Vehicle papers");
   });
 
   it("composes every registered message under 800 characters", () => {

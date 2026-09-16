@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { BadgeCheck, Check, Info, TriangleAlert } from "lucide-react";
 import { site, type CarSlug } from "@/content/site";
+import { categoryPhotoUrls } from "@/lib/fleet/public";
 import { carContent } from "@/content/cars";
-import { EnquirySection } from "@/components/sections/EnquirySection";
+import { BookingSection } from "@/components/sections/BookingSection";
 import { FaqSection } from "@/components/sections/FaqSection";
 import { FinalCta } from "@/components/sections/FinalCta";
 import { Fleet } from "@/components/Fleet";
@@ -13,6 +14,7 @@ import { breadcrumbSchema, carSchema, type Crumb } from "@/lib/seo/schema";
 import { pageMetadata } from "@/lib/seo/metadata";
 
 export const dynamicParams = false;
+export const revalidate = 300;
 
 export function generateStaticParams() { return site.fleet.map((car) => ({ slug: car.slug })); }
 
@@ -30,6 +32,7 @@ export async function generateMetadata(props: PageProps<"/cars/[slug]">): Promis
 }
 
 export default async function CarPage(props: PageProps<"/cars/[slug]">) {
+  const fleetPhotos = await categoryPhotoUrls();
   const { slug } = await props.params;
   const found = load(slug);
   if (!found) notFound();
@@ -51,10 +54,10 @@ export default async function CarPage(props: PageProps<"/cars/[slug]">) {
 
     <section className="section" data-reveal><div className="shell"><span className="eyebrow">Why people choose it</span><h2 className="section-title">What the {car.name} does well.</h2><div className="documents documents-wide">{copy.highlights.map((item) => <div className="document" key={item.title}><span className="document-icon"><BadgeCheck size={20} /></span><div><strong>{item.title}</strong><p>{item.detail}</p></div></div>)}</div></div></section>
 
-    <EnquirySection defaultCarSlug={slug as CarSlug} title={`Check ${car.name} availability`} copy="Send your dates and we’ll confirm the exact vehicle and final price on WhatsApp. The form is already set to this car." />
+    <BookingSection category={slug} title={`Book a ${car.name}`} copy={`Pick your dates and we will show every car free for that window, including our ${car.name.toLowerCase()}s. Zero upfront online payment.`} />
     <FaqSection items={copy.faq} title={`${car.name} questions.`} copy="Anything else, message us — we answer these all day." />
 
-    <section className="section" data-reveal><div className="shell"><span className="eyebrow">Not quite right?</span><h2 className="section-title">The rest of the fleet.</h2><Fleet exclude={slug as CarSlug} /></div></section>
+    <section className="section" data-reveal><div className="shell"><span className="eyebrow">Not quite right?</span><h2 className="section-title">The rest of the fleet.</h2><Fleet exclude={slug as CarSlug} photos={fleetPhotos} /></div></section>
 
     <FinalCta />
   </>;

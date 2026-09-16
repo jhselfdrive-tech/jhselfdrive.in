@@ -4,31 +4,24 @@ import { useActionState, useState } from "react";
 import { ArrowRight, LoaderCircle } from "lucide-react";
 import { createBookingAction, type BookingActionState } from "@/app/admin/actions/bookings";
 import { site } from "@/content/site";
-import type { Enquiry } from "@/lib/admin/data";
 import { VehicleSelect } from "./VehicleSelect";
 
-function initialTimes(enquiry?: Enquiry | null) {
+function initialTimes() {
   const today = new Date().toISOString().slice(0, 10);
-  const startDate = enquiry?.pickup_date || today;
-  const endDate = enquiry?.return_date || startDate;
-  return {
-    startAt: `${startDate}T09:00`,
-    endAt: `${endDate}T${endDate === startDate ? "18:00" : "09:00"}`,
-  };
+  return { startAt: `${today}T09:00`, endAt: `${today}T18:00` };
 }
 
-export function BookingForm({ enquiry, customerId }: { enquiry?: Enquiry | null; customerId?: string }) {
-  const defaults = initialTimes(enquiry);
+export function BookingForm({ customerId }: { customerId: string }) {
+  const defaults = initialTimes();
   const [state, action, pending] = useActionState(createBookingAction, {} as BookingActionState);
-  const [categorySlug, setCategorySlug] = useState(enquiry?.car_slug || site.fleet[0].slug);
+  const [categorySlug, setCategorySlug] = useState<string>(site.fleet[0].slug);
   const [startAt, setStartAt] = useState(defaults.startAt);
   const [endAt, setEndAt] = useState(defaults.endAt);
 
   return <form className="admin-form-card" action={action}>
-    <h2>{enquiry ? "Convert enquiry to booking" : "Record a booking"}</h2>
-    <p>{enquiry ? `${enquiry.customer?.full_name || "Customer"} · ${enquiry.customer?.phone}` : "Add an actual rental to keep revenue and customer segments accurate."}</p>
-    {enquiry ? <input type="hidden" name="enquiryId" value={enquiry.id} /> : null}
-    <input type="hidden" name="customerId" value={customerId || enquiry?.customer_id || ""} />
+    <h2>Record a booking</h2>
+    <p>Add a walk-in or phone rental to keep revenue and customer segments accurate.</p>
+    <input type="hidden" name="customerId" value={customerId} />
     <div className="admin-form-grid">
       <div className="admin-field admin-field-full">
         <label htmlFor="booking-car">Vehicle category</label>
@@ -56,12 +49,12 @@ export function BookingForm({ enquiry, customerId }: { enquiry?: Enquiry | null;
       <div className="admin-field admin-field-full">
         <label htmlFor="booking-status">Booking status</label>
         <select id="booking-status" name="status" defaultValue="confirmed">
-          <option value="confirmed">Confirmed</option><option value="ongoing">Ongoing</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option>
+          <option value="approved">Approved</option><option value="confirmed">Confirmed</option><option value="ongoing">On trip</option><option value="completed">Completed</option>
         </select>
       </div>
       <div className="admin-field admin-field-full">
         <label htmlFor="booking-notes">Notes</label>
-        <textarea id="booking-notes" name="notes" defaultValue={enquiry?.message || ""} placeholder="Payment notes, pickup details or special requests…" />
+        <textarea id="booking-notes" name="notes" placeholder="Payment notes, pickup details or special requests…" />
       </div>
     </div>
     {state.message ? <p className="admin-form-error" role="alert">{state.message}</p> : null}

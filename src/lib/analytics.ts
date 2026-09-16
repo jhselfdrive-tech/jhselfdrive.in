@@ -1,4 +1,4 @@
-export type EventName = "page_view" | "whatsapp_click" | "call_click" | "fleet_card_view" | "enquiry_started" | "enquiry_submitted";
+export type EventName = "page_view" | "whatsapp_click" | "call_click" | "fleet_card_view" | "booking_started" | "booking_dates_selected" | "booking_submitted";
 type EventProps = { carSlug?: string; path?: string };
 
 function sessionId() {

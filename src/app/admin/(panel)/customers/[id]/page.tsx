@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CalendarDays, CarFront, Mail, MapPin, MessageCircle, Phone } from "lucide-react";
+import { CarFront, Mail, MapPin, MessageCircle, Phone } from "lucide-react";
 import { updateCustomerNotesAction } from "@/app/admin/actions/customers";
+import { BookingForm } from "@/components/admin/BookingForm";
 import { TagEditor } from "@/components/admin/TagEditor";
 import { site } from "@/content/site";
 import { getCustomer } from "@/lib/admin/data";
@@ -15,7 +16,7 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
   const data = await getCustomer(id);
   if (!data) notFound();
 
-  const { customer, enquiries, bookings } = data;
+  const { customer, bookings } = data;
   const initials = (customer.full_name || "Guest")
     .split(" ")
     .map((part) => part[0])
@@ -28,7 +29,7 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
       <div>
         <span className="admin-overline">Customer profile</span>
         <h1>{customer.full_name || "Unnamed customer"}</h1>
-        <p>Complete enquiry and booking relationship.</p>
+        <p>Complete booking relationship.</p>
       </div>
     </div>
     <div className="admin-profile-grid">
@@ -44,7 +45,7 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
           <span><MapPin size={14} /> {customer.city || "Ramanathapuram"}</span>
         </div>
         <div className="admin-profile-stats">
-          <div className="admin-profile-stat"><strong>{customer.enquiry_count}</strong><span>Enquiries</span></div>
+          <div className="admin-profile-stat"><strong>{customer.booking_count}</strong><span>Bookings</span></div>
           <div className="admin-profile-stat"><strong>{customer.completed_booking_count}</strong><span>Completed</span></div>
           <div className="admin-profile-stat"><strong>₹{customer.lifetime_value.toLocaleString("en-IN")}</strong><span>Lifetime</span></div>
         </div>
@@ -74,14 +75,8 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
           </div>
         </section>
         <section className="admin-card">
-          <div className="admin-card-head"><div><h2>Enquiry history</h2><span className="admin-card-subtitle">{enquiries.length} requests received</span></div></div>
-          <div className="admin-history">
-            {enquiries.map((enquiry) => <div className="admin-history-item" key={enquiry.id}>
-              <span className="admin-history-icon"><CalendarDays size={17} /></span>
-              <div><strong>{site.fleet.find((car) => car.slug === enquiry.car_slug)?.name || enquiry.car_slug}</strong><small>{enquiry.pickup_date} → {enquiry.return_date} · {enquiry.status}</small></div>
-              <span>{new Date(enquiry.created_at).toLocaleDateString("en-IN")}</span>
-            </div>)}
-          </div>
+          <div className="admin-card-head"><div><h2>Record a booking</h2><span className="admin-card-subtitle">For walk-in or phone rentals that did not come through the website.</span></div></div>
+          <BookingForm customerId={customer.id} />
         </section>
       </div>
     </div>

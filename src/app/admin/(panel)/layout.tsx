@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BarChart3, CalendarDays, CalendarRange, CarFront, ExternalLink, Globe, Inbox, LogOut, Users } from "lucide-react";
+import { BarChart3, CalendarDays, CalendarRange, CarFront, ExternalLink, Globe, LogOut, Users } from "lucide-react";
 import { verifyAdmin } from "@/lib/admin/auth";
 import { signOutAction } from "@/app/admin/actions/auth";
 
@@ -7,7 +7,6 @@ export const dynamic = "force-dynamic";
 
 const nav = [
   { href: "/admin", label: "Overview", icon: BarChart3 },
-  { href: "/admin/enquiries", label: "Enquiries", icon: Inbox },
   { href: "/admin/bookings", label: "Bookings", icon: CalendarDays },
   { href: "/admin/fleet", label: "Fleet", icon: CarFront },
   { href: "/admin/calendar", label: "Calendar", icon: CalendarRange },

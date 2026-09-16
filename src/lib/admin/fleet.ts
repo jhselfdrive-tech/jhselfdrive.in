@@ -4,7 +4,8 @@ import { verifyAdmin } from "./auth";
 import { rangesOverlap, utilisationPercentage } from "./availability";
 import { checklistGaps, type ChecklistFacts } from "./checklist";
 import { isMissingSchema } from "./schema";
-import { DOCUMENTS_BUCKET, signObjects } from "./storage";
+import { DOCUMENTS_BUCKET, removeObjects, signObjects } from "./storage";
+import { PHOTOS_BUCKET, publicPhotoUrl } from "@/lib/fleet/photos";
 
 export type VehicleStatus = "active" | "maintenance" | "retired" | "sold";
 export type DocumentType = "insurance" | "fitness" | "permit" | "puc" | "road_tax";
@@ -23,7 +24,26 @@ export type Vehicle = {
   odometer_km: number | null;
   acquired_on: string | null;
   notes: string | null;
+  day_rate: number;
+  km_rate: number | null;
+  included_km_per_day: number | null;
+  deposit: number;
+  tagline: string | null;
+  description: string | null;
+  is_bookable: boolean;
   created_at: string;
+};
+
+export type VehiclePhoto = {
+  id: string;
+  vehicle_id: string;
+  file_path: string;
+  file_name: string | null;
+  file_mime: string | null;
+  file_size_bytes: number | null;
+  sort_order: number;
+  created_at: string;
+  url: string | null;
 };
 
 export type VehicleDocument = {
@@ -80,6 +100,13 @@ type VehicleInput = {
   odometerKm?: number;
   acquiredOn?: string;
   notes: string;
+  dayRate: number;
+  kmRate?: number;
+  includedKmPerDay?: number;
+  deposit: number;
+  tagline: string;
+  description: string;
+  isBookable: boolean;
 };
 
 function cleanVehicle(input: VehicleInput) {
@@ -96,6 +123,13 @@ function cleanVehicle(input: VehicleInput) {
     odometer_km: input.odometerKm ?? null,
     acquired_on: input.acquiredOn || null,
     notes: input.notes.trim() || null,
+    day_rate: input.dayRate,
+    km_rate: input.kmRate ?? null,
+    included_km_per_day: input.includedKmPerDay ?? null,
+    deposit: input.deposit,
+    tagline: input.tagline.trim() || null,
+    description: input.description.trim() || null,
+    is_bookable: input.isBookable,
   };
 }
 
@@ -110,35 +144,45 @@ export async function listVehicles(filters: { status?: string; category?: string
   if (filters.status && filters.status !== "all") query = query.eq("status", filters.status);
   if (filters.category && filters.category !== "all") query = query.eq("category_slug", filters.category);
   const now = new Date().toISOString();
-  const [vehiclesResult, alertsResult, bookingsResult] = await Promise.all([
+  const [vehiclesResult, alertsResult, bookingsResult, photosResult] = await Promise.all([
     query,
     admin.from("vehicle_alerts").select("*"),
     admin.from("bookings").select("id,vehicle_id,start_at,end_at,status,customer:customers(full_name,phone)").lte("start_at", now).gt("end_at", now).in("status", ["confirmed", "ongoing"]),
+    admin.from("vehicle_photos").select("vehicle_id,file_path,sort_order").order("sort_order"),
   ]);
   if (vehiclesResult.error) throw vehiclesResult.error;
   if (alertsResult.error) throw alertsResult.error;
   if (bookingsResult.error) throw bookingsResult.error;
+  // vehicle_photos arrives with migration 0006; until then the grid simply
+  // shows no thumbnails rather than failing the whole page.
+  if (photosResult.error && !isMissingSchema(photosResult.error)) throw photosResult.error;
   const alerts = (alertsResult.data || []) as VehicleAlert[];
-  return ((vehiclesResult.data || []) as Vehicle[]).map((vehicle) => ({
+  const photos = (photosResult.data || []) as Array<{ vehicle_id: string; file_path: string }>;
+  const vehicles = ((vehiclesResult.data || []) as Vehicle[]).map((vehicle) => ({
     ...vehicle,
     documentAlerts: alerts.filter((alert) => alert.vehicle_id === vehicle.id),
+    photoUrl: publicPhotoUrl(photos.find((photo) => photo.vehicle_id === vehicle.id)?.file_path),
+    photoCount: photos.filter((photo) => photo.vehicle_id === vehicle.id).length,
     currentBooking: (bookingsResult.data || []).find((booking) => booking.vehicle_id === vehicle.id) || null,
   }));
+  return { vehicles, schemaReady: !photosResult.error };
 }
 
 export async function getVehicle(id: string) {
   await verifyAdmin();
   const admin = getSupabaseAdmin();
-  const [vehicleResult, documentsResult, blocksResult, bookingsResult] = await Promise.all([
+  const [vehicleResult, documentsResult, blocksResult, bookingsResult, photosResult] = await Promise.all([
     admin.from("vehicles").select("*").eq("id", id).maybeSingle(),
     admin.from("vehicle_documents").select("*").eq("vehicle_id", id).order("expires_on", { ascending: false }),
     admin.from("vehicle_blocks").select("*").eq("vehicle_id", id).order("start_at", { ascending: false }),
     admin.from("bookings").select("id,customer_id,enquiry_id,car_slug,vehicle_id,start_at,end_at,start_date,end_date,amount_total,deposit,status,created_at,customer:customers(full_name,phone)").eq("vehicle_id", id).order("start_at", { ascending: false }),
+    admin.from("vehicle_photos").select("*").eq("vehicle_id", id).order("sort_order").order("created_at"),
   ]);
   if (vehicleResult.error) throw vehicleResult.error;
   if (documentsResult.error) throw documentsResult.error;
   if (blocksResult.error) throw blocksResult.error;
   if (bookingsResult.error) throw bookingsResult.error;
+  if (photosResult.error && !isMissingSchema(photosResult.error)) throw photosResult.error;
   if (!vehicleResult.data) return null;
   const bookings = bookingsResult.data || [];
   const periodEnd = new Date();
@@ -151,6 +195,8 @@ export async function getVehicle(id: string) {
     vehicle: vehicleResult.data as Vehicle,
     documents: documents.map((document) => ({ ...document, signedUrl: document.file_path ? signedDocuments.get(document.file_path) || null : null })),
     blocks: (blocksResult.data || []) as VehicleBlock[],
+    photos: ((photosResult.data || []) as VehiclePhoto[]).map((photo) => ({ ...photo, url: publicPhotoUrl(photo.file_path) })),
+    schemaReady: !photosResult.error,
     bookings,
     utilisation: utilisationPercentage(counted, periodStart, periodEnd),
     revenue,
@@ -259,19 +305,19 @@ export async function getFleetAlerts() {
   await verifyAdmin();
   const admin = getSupabaseAdmin();
   const now = new Date();
-  const stale = new Date(now.getTime() - 48 * 3_600_000).toISOString();
-  const [documents, overdue, unassigned, enquiries, assignedBookings, blocks] = await Promise.all([
+  const stale = new Date(now.getTime() - 24 * 3_600_000).toISOString();
+  const [documents, overdue, unassigned, staleRequests, assignedBookings, blocks] = await Promise.all([
     admin.from("vehicle_alerts").select("*").order("days_remaining"),
     admin.from("bookings").select("id,end_at,vehicle:vehicles(registration_number,display_name),customer:customers(full_name,phone)").eq("status", "ongoing").lt("end_at", now.toISOString()).order("end_at"),
-    admin.from("bookings").select("id,start_at,car_slug,customer:customers(full_name,phone)").eq("status", "confirmed").is("vehicle_id", null).order("start_at"),
-    admin.from("enquiries").select("id,created_at,car_slug,customer:customers(full_name,phone)").eq("status", "new").lt("created_at", stale).order("created_at"),
+    admin.from("bookings").select("id,start_at,car_slug,customer:customers(full_name,phone)").eq("status", "approved").is("vehicle_id", null).order("start_at"),
+    admin.from("bookings").select("id,created_at,car_slug,start_at,customer:customers(full_name,phone)").eq("status", "requested").lt("created_at", stale).order("created_at"),
     admin.from("bookings").select("id,vehicle_id,start_at,end_at,vehicle:vehicles(registration_number)").not("vehicle_id", "is", null).in("status", ["confirmed", "ongoing"]),
     admin.from("vehicle_blocks").select("id,vehicle_id,start_at,end_at,reason"),
   ]);
   if (documents.error) throw documents.error;
   if (overdue.error) throw overdue.error;
   if (unassigned.error) throw unassigned.error;
-  if (enquiries.error) throw enquiries.error;
+  if (staleRequests.error) throw staleRequests.error;
   if (assignedBookings.error) throw assignedBookings.error;
   if (blocks.error) throw blocks.error;
   const activeBookingIds = (assignedBookings.data || []).map((booking) => booking.id);
@@ -298,9 +344,86 @@ export async function getFleetAlerts() {
     documents: (documents.data || []) as VehicleAlert[],
     overdue: overdue.data || [],
     unassigned: unassigned.data || [],
-    staleEnquiries: enquiries.data || [],
+    staleRequests: staleRequests.data || [],
     conflicts,
     checklist,
     overduePurges: purges.data || [],
   };
+}
+
+export async function addVehiclePhotos(vehicleId: string, photos: Array<{ id: string; filePath: string; fileName: string; fileMime: string; fileSizeBytes: number }>) {
+  await verifyAdmin();
+  if (!photos.length) return;
+  const admin = getSupabaseAdmin();
+  const { data: existing, error: existingError } = await admin.from("vehicle_photos").select("sort_order").eq("vehicle_id", vehicleId).order("sort_order", { ascending: false }).limit(1);
+  if (existingError) throw existingError;
+  const start = (existing?.[0]?.sort_order ?? -1) + 1;
+  const { error } = await admin.from("vehicle_photos").insert(photos.map((photo, index) => ({
+    id: photo.id,
+    vehicle_id: vehicleId,
+    file_path: photo.filePath,
+    file_name: photo.fileName,
+    file_mime: photo.fileMime,
+    file_size_bytes: photo.fileSizeBytes,
+    sort_order: start + index,
+  })));
+  if (error) throw error;
+}
+
+/** Applies an explicit photo order. Ids not belonging to the vehicle are ignored. */
+export async function reorderVehiclePhotos(vehicleId: string, orderedIds: string[]) {
+  await verifyAdmin();
+  const admin = getSupabaseAdmin();
+  const { data, error } = await admin.from("vehicle_photos").select("id").eq("vehicle_id", vehicleId);
+  if (error) throw error;
+  const owned = new Set((data || []).map((photo) => photo.id as string));
+  const ordered = orderedIds.filter((id) => owned.has(id));
+  for (const [index, id] of ordered.entries()) {
+    const { error: updateError } = await admin.from("vehicle_photos").update({ sort_order: index }).eq("id", id).eq("vehicle_id", vehicleId);
+    if (updateError) throw updateError;
+  }
+}
+
+export async function deleteVehiclePhoto(photoId: string) {
+  await verifyAdmin();
+  const admin = getSupabaseAdmin();
+  const { data, error } = await admin.from("vehicle_photos").select("id,vehicle_id,file_path").eq("id", photoId).maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  const { error: deleteError } = await admin.from("vehicle_photos").delete().eq("id", photoId);
+  if (deleteError) throw deleteError;
+  // Storage is cleaned up after the row is gone: an orphaned object is
+  // recoverable, a row pointing at a missing object renders a broken card.
+  await removeObjects(PHOTOS_BUCKET, [data.file_path as string]).catch(() => undefined);
+  return data.vehicle_id as string;
+}
+
+/**
+ * Hard-deletes a vehicle and its photos. bookings.vehicle_id is ON DELETE
+ * RESTRICT, so a car with any booking history cannot be removed without
+ * orphaning that history — those must be retired instead.
+ */
+export async function deleteVehicle(vehicleId: string) {
+  await verifyAdmin();
+  const admin = getSupabaseAdmin();
+  const { count, error: countError } = await admin.from("bookings").select("id", { count: "exact", head: true }).eq("vehicle_id", vehicleId);
+  if (countError) throw countError;
+  if (count && count > 0) throw fleetError("This vehicle has booking history.", "VEHICLE_HAS_BOOKINGS");
+
+  const [photos, documents] = await Promise.all([
+    admin.from("vehicle_photos").select("file_path").eq("vehicle_id", vehicleId),
+    admin.from("vehicle_documents").select("file_path").eq("vehicle_id", vehicleId),
+  ]);
+  if (photos.error) throw photos.error;
+  if (documents.error) throw documents.error;
+
+  const { error } = await admin.from("vehicles").delete().eq("id", vehicleId);
+  if (error) throw error;
+
+  const photoPaths = (photos.data || []).map((photo) => photo.file_path as string).filter(Boolean);
+  const documentPaths = (documents.data || []).flatMap((document) => document.file_path ? [document.file_path as string] : []);
+  await Promise.all([
+    photoPaths.length ? removeObjects(PHOTOS_BUCKET, photoPaths).catch(() => undefined) : undefined,
+    documentPaths.length ? removeObjects(DOCUMENTS_BUCKET, documentPaths).catch(() => undefined) : undefined,
+  ]);
 }

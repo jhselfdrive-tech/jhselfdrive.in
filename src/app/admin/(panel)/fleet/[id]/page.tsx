@@ -1,9 +1,9 @@
 import { notFound } from "next/navigation";
-import { AlertTriangle, CalendarClock, CarFront, ExternalLink, FileCheck2, Gauge, IndianRupee, Wrench } from "lucide-react";
+import { AlertTriangle, CalendarClock, CarFront, Database, ExternalLink, FileCheck2, Gauge, IndianRupee, Wrench } from "lucide-react";
 import { BlockForm } from "@/components/admin/BlockForm";
 import { DocumentForm } from "@/components/admin/DocumentForm";
 import { MetricCard } from "@/components/admin/MetricCard";
-import { VehicleForm } from "@/components/admin/VehicleForm";
+import { VehicleDialog } from "@/components/admin/VehicleDialog";
 import { getVehicle } from "@/lib/admin/fleet";
 
 export const dynamic = "force-dynamic";
@@ -20,9 +20,9 @@ export default async function VehiclePage({ params, searchParams }: { params: Pr
   const query = await searchParams;
   const data = await getVehicle(id);
   if (!data) notFound();
-  const { vehicle, documents, blocks, bookings, utilisation, revenue } = data;
+  const { vehicle, documents, blocks, photos, bookings, utilisation, revenue, schemaReady } = data;
   return <>
-    <div className="admin-page-head"><div><span className="admin-overline">{vehicle.registration_number}</span><h1>{vehicle.display_name || vehicle.model || "Vehicle profile"}</h1><p>Specs, compliance, downtime and rental performance.</p></div><span className={`admin-fleet-status admin-fleet-${vehicle.status}`}>{vehicle.status}</span></div>
+    <div className="admin-page-head"><div><span className="admin-overline">{vehicle.registration_number}</span><h1>{vehicle.display_name || vehicle.model || "Vehicle profile"}</h1><p>Specs, compliance, downtime and rental performance.</p></div><div className="admin-head-actions"><span className={`admin-fleet-status admin-fleet-${vehicle.status}`}>{vehicle.status}</span><VehicleDialog vehicle={vehicle} photos={photos} /></div></div>
     {query.created === "1" ? <p className="admin-form-success">Vehicle added. Add its current documents and any known maintenance blocks below.</p> : null}
     <section className="admin-metrics admin-vehicle-metrics">
       <MetricCard label="90-day utilisation" value={`${utilisation}%`} detail="Booked time in the last 90 days" icon={Gauge} color="#dce9ff" ink="#3a6ba7" />
@@ -30,9 +30,20 @@ export default async function VehiclePage({ params, searchParams }: { params: Pr
       <MetricCard label="Bookings" value={String(bookings.length)} detail="Complete vehicle history" icon={CalendarClock} color="#ffeadc" ink="#b95735" />
       <MetricCard label="Documents" value={String(documents.length)} detail="Renewal records retained" icon={FileCheck2} color="#eee5ff" ink="#734ca1" />
     </section>
+    <section className="admin-card">
+      <div className="admin-card-head"><div><h2>Customer-facing photos</h2><span className="admin-card-subtitle">The first photo is the cover shown in search results. Edit them in the vehicle dialog.</span></div></div>
+      {!schemaReady ? <div className="admin-notice"><Database size={18} /><div><strong>Fleet database setup is still required</strong><p>Apply <code>supabase/migrations/0006_vehicle_bookings.sql</code> before uploading photos or setting per-car rates.</p></div></div> : null}
+      <div className="admin-photo-grid admin-photo-grid-readonly">
+        {photos.map((photo) => photo.url
+          // eslint-disable-next-line @next/next/no-img-element -- storage URL, sized by CSS
+          ? <img className="admin-photo-tile" src={photo.url} alt={photo.file_name || "Vehicle photo"} key={photo.id} loading="lazy" />
+          : null)}
+        {!photos.length ? <div className="admin-empty">No photos yet — customers will see a placeholder.</div> : null}
+      </div>
+    </section>
     <div className="admin-detail-columns">
-      <VehicleForm vehicle={vehicle} />
-      <div className="admin-detail-stack"><DocumentForm vehicleId={vehicle.id} /><BlockForm vehicleId={vehicle.id} /></div>
+      <DocumentForm vehicleId={vehicle.id} />
+      <BlockForm vehicleId={vehicle.id} />
     </div>
     <section className="admin-card">
       <div className="admin-card-head"><div><h2>Compliance documents</h2><span className="admin-card-subtitle">Renewal history, newest expiry first</span></div></div>

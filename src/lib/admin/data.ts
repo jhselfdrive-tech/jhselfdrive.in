@@ -4,22 +4,15 @@ import { verifyAdmin } from "./auth";
 import { deriveSegments, type Segment } from "./segments";
 import { isMissingSchema } from "./schema";
 import type { ChecklistFacts } from "./checklist";
+import { BLOCKING_STATUSES, type BookingStatus, isBookingStatus, templateForTransition } from "@/lib/bookings/status";
 
-export type EnquiryStatus = "new" | "contacted" | "converted" | "lost";
-export type BookingStatus = "confirmed" | "ongoing" | "completed" | "cancelled";
+export type { BookingStatus };
 
 export type CustomerSummary = {
   id: string; phone: string; full_name: string | null; email: string | null; city: string | null;
   enquiry_count: number; first_seen_at: string; last_seen_at: string; tags: string[]; notes: string | null;
   booking_count: number; completed_booking_count: number; lifetime_value: number; last_booking_at: string | null;
   segments: Segment[];
-};
-
-export type Enquiry = {
-  id: string; customer_id: string; car_slug: string; pickup_date: string; return_date: string;
-  message: string | null; status: EnquiryStatus; source: string; utm_source: string | null;
-  utm_medium: string | null; utm_campaign: string | null; created_at: string;
-  customer: { id: string; full_name: string | null; phone: string; enquiry_count: number } | null;
 };
 
 export type Booking = {
@@ -36,28 +29,9 @@ function asNumber(value: unknown) { return Number(value || 0); }
 function mapCustomer(row: Record<string, unknown>): CustomerSummary {
   const stats = {
     completed_booking_count: asNumber(row.completed_booking_count), booking_count: asNumber(row.booking_count),
-    enquiry_count: asNumber(row.enquiry_count), last_seen_at: String(row.last_seen_at),
+    last_seen_at: String(row.last_seen_at),
   };
   return { ...(row as Omit<CustomerSummary, "segments" | "lifetime_value">), lifetime_value: asNumber(row.lifetime_value), segments: deriveSegments(stats) } as CustomerSummary;
-}
-
-export async function listEnquiries(filters: { status?: string; car?: string; from?: string; to?: string } = {}) {
-  await verifyAdmin();
-  let query = getSupabaseAdmin().from("enquiries").select("id,customer_id,car_slug,pickup_date,return_date,message,status,source,utm_source,utm_medium,utm_campaign,created_at,customer:customers(id,full_name,phone,enquiry_count)").order("created_at", { ascending: false }).limit(250);
-  if (filters.status && filters.status !== "all") query = query.eq("status", filters.status);
-  if (filters.car && filters.car !== "all") query = query.eq("car_slug", filters.car);
-  if (filters.from) query = query.gte("created_at", `${filters.from}T00:00:00`);
-  if (filters.to) query = query.lte("created_at", `${filters.to}T23:59:59`);
-  const { data, error } = await query;
-  if (error) throw error;
-  return (data || []) as unknown as Enquiry[];
-}
-
-export async function getEnquiry(id: string) {
-  await verifyAdmin();
-  const { data, error } = await getSupabaseAdmin().from("enquiries").select("id,customer_id,car_slug,pickup_date,return_date,message,status,source,utm_source,utm_medium,utm_campaign,created_at,customer:customers(id,full_name,phone,enquiry_count)").eq("id", id).maybeSingle();
-  if (error) throw error;
-  return data as unknown as Enquiry | null;
 }
 
 export async function listCustomers(filters: { search?: string; segment?: string } = {}) {
@@ -76,9 +50,8 @@ export async function listCustomers(filters: { search?: string; segment?: string
 export async function getCustomer(id: string) {
   await verifyAdmin();
   const admin = getSupabaseAdmin();
-  const [customerResult, enquiriesResult, initialBookingsResult] = await Promise.all([
+  const [customerResult, initialBookingsResult] = await Promise.all([
     admin.from("customer_stats").select("*").eq("id", id).maybeSingle(),
-    admin.from("enquiries").select("id,car_slug,pickup_date,return_date,message,status,source,created_at").eq("customer_id", id).order("created_at", { ascending: false }),
     admin.from("bookings").select("id,enquiry_id,car_slug,vehicle_id,start_at,end_at,start_date,end_date,amount_total,deposit,deposit_returned,status,notes,created_by,created_at,vehicle:vehicles(id,registration_number,display_name)").eq("customer_id", id).order("created_at", { ascending: false }),
   ]);
   let bookingsResult = initialBookingsResult;
@@ -86,10 +59,9 @@ export async function getCustomer(id: string) {
     bookingsResult = await admin.from("bookings").select("id,enquiry_id,car_slug,start_date,end_date,amount_total,deposit,deposit_returned,status,notes,created_by,created_at").eq("customer_id", id).order("created_at", { ascending: false }) as typeof initialBookingsResult;
   }
   if (customerResult.error) throw customerResult.error;
-  if (enquiriesResult.error) throw enquiriesResult.error;
   if (bookingsResult.error) throw bookingsResult.error;
   if (!customerResult.data) return null;
-  return { customer: mapCustomer(customerResult.data as Record<string, unknown>), enquiries: enquiriesResult.data || [], bookings: bookingsResult.data || [] };
+  return { customer: mapCustomer(customerResult.data as Record<string, unknown>), bookings: bookingsResult.data || [] };
 }
 
 export async function listBookings(filters: { status?: string } = {}) {
@@ -114,18 +86,99 @@ export async function listBookings(filters: { status?: string } = {}) {
   return bookings.map((booking) => ({ ...booking, checklist: checklist.get(booking.id) }));
 }
 
-export async function updateEnquiryStatus(id: string, status: EnquiryStatus) {
-  await verifyAdmin();
-  const { error } = await getSupabaseAdmin().from("enquiries").update({ status }).eq("id", id);
-  if (error) throw error;
+export type BookingTransition = {
+  from: BookingStatus;
+  to: BookingStatus;
+  templateId: ReturnType<typeof templateForTransition>;
+};
+
+/**
+ * The single writer for booking status. The RPC holds a row lock while it
+ * validates the edge, the vehicle requirement and availability, so two admins
+ * acting at once cannot drive a booking into an illegal state.
+ */
+export async function transitionBooking(input: {
+  bookingId: string;
+  to: BookingStatus;
+  note?: string;
+  vehicleId?: string;
+  amountTotal?: number;
+  deposit?: number;
+  depositReturned?: boolean;
+}): Promise<BookingTransition> {
+  const adminUser = await verifyAdmin();
+  const { data, error } = await getSupabaseAdmin().rpc("transition_booking", {
+    p_booking_id: input.bookingId,
+    p_to_status: input.to,
+    p_actor: adminUser.email,
+    p_note: input.note?.trim() || null,
+    p_vehicle_id: input.vehicleId || null,
+    p_amount_total: typeof input.amountTotal === "number" ? input.amountTotal : null,
+    p_deposit: typeof input.deposit === "number" ? input.deposit : null,
+    p_deposit_returned: typeof input.depositReturned === "boolean" ? input.depositReturned : null,
+  });
+  if (error) throw normaliseRpcError(error);
+  const row = (data as Array<{ from_status: string; to_status: string }> | null)?.[0];
+  const from = isBookingStatus(row?.from_status) ? row!.from_status : input.to;
+  return { from, to: input.to, templateId: templateForTransition(from, input.to) };
 }
 
-export async function updateBookingStatus(id: string, status: BookingStatus, depositReturned?: boolean) {
-  await verifyAdmin();
-  const update: { status: BookingStatus; deposit_returned?: boolean } = { status };
-  if (typeof depositReturned === "boolean") update.deposit_returned = depositReturned;
-  const { error } = await getSupabaseAdmin().from("bookings").update(update).eq("id", id);
+/** Deposit return is a money fact, not a lifecycle edge, so it moves on its own. */
+export async function setDepositReturned(bookingId: string, depositReturned: boolean) {
+  const adminUser = await verifyAdmin();
+  const admin = getSupabaseAdmin();
+  const { error } = await admin.from("bookings").update({ deposit_returned: depositReturned }).eq("id", bookingId);
   if (error) throw error;
+  const { data: booking } = await admin.from("bookings").select("status").eq("id", bookingId).maybeSingle();
+  await admin.from("booking_status_events").insert({
+    booking_id: bookingId,
+    from_status: booking?.status || null,
+    to_status: booking?.status || "completed",
+    note: depositReturned ? "Deposit returned" : "Deposit marked as held",
+    created_by: adminUser.email,
+  });
+}
+
+export async function listBookingStatusEvents(bookingId: string) {
+  await verifyAdmin();
+  const { data, error } = await getSupabaseAdmin()
+    .from("booking_status_events")
+    .select("id,from_status,to_status,note,message_template_id,message_sent_at,created_by,created_at")
+    .eq("booking_id", bookingId)
+    .order("created_at");
+  if (error) {
+    if (isMissingSchema(error)) return [];
+    throw error;
+  }
+  return (data || []) as BookingStatusEvent[];
+}
+
+export type BookingStatusEvent = {
+  id: string; from_status: string | null; to_status: string; note: string | null;
+  message_template_id: string | null; message_sent_at: string | null; created_by: string; created_at: string;
+};
+
+/** Stamps the most recent event for a booking as having had its message sent. */
+export async function markTransitionMessageSent(bookingId: string, templateId: string) {
+  await verifyAdmin();
+  const admin = getSupabaseAdmin();
+  const { data, error } = await admin.from("booking_status_events").select("id").eq("booking_id", bookingId).order("created_at", { ascending: false }).limit(1);
+  if (error) throw error;
+  const latest = data?.[0]?.id;
+  if (!latest) return;
+  const { error: updateError } = await admin.from("booking_status_events")
+    .update({ message_template_id: templateId, message_sent_at: new Date().toISOString() })
+    .eq("id", latest);
+  if (updateError) throw updateError;
+}
+
+/** Turns the RPC's raise-exception messages into codes the actions can map to copy. */
+function normaliseRpcError(error: { message?: string; code?: string }) {
+  const message = error.message || "";
+  for (const code of ["ILLEGAL_TRANSITION", "VEHICLE_REQUIRED", "VEHICLE_UNAVAILABLE", "BOOKING_NOT_FOUND"]) {
+    if (message.includes(code)) return Object.assign(new Error(message), { code });
+  }
+  return Object.assign(new Error(message || "Transition failed"), { code: error.code || "" });
 }
 
 export async function updateCustomerTags(id: string, tags: string[]) {
@@ -141,24 +194,15 @@ export async function updateCustomerNotes(id: string, notes: string) {
   if (error) throw error;
 }
 
+
 export async function createBooking(input: {
-  enquiryId?: string; customerId?: string; carSlug: string; vehicleId?: string; startAt: string; endAt: string;
+  customerId: string; carSlug: string; vehicleId?: string; startAt: string; endAt: string;
   amountTotal: number; deposit: number; status: BookingStatus; notes: string;
 }) {
   const adminUser = await verifyAdmin();
   const supabase = getSupabaseAdmin();
-  if (input.enquiryId) {
-    const { data, error } = await supabase.rpc("create_booking_from_enquiry", {
-      p_enquiry_id: input.enquiryId, p_car_slug: input.carSlug, p_vehicle_id: input.vehicleId || null,
-      p_start_at: input.startAt, p_end_at: input.endAt,
-      p_amount_total: input.amountTotal, p_deposit: input.deposit, p_status: input.status, p_notes: input.notes,
-      p_created_by: adminUser.email,
-    });
-    if (error) throw error;
-    return data as string;
-  }
   if (!input.customerId) throw new Error("Customer is required");
-  if (input.vehicleId && input.status !== "cancelled") {
+  if (input.vehicleId && BLOCKING_STATUSES.includes(input.status)) {
     const { data: available, error: availabilityError } = await supabase.rpc("find_available_vehicles", {
       p_category_slug: input.carSlug, p_start_at: input.startAt, p_end_at: input.endAt, p_exclude_booking_id: null,
     });
@@ -174,6 +218,10 @@ export async function createBooking(input: {
     created_by: adminUser.email,
   }).select("id").single();
   if (error) throw error;
+  await supabase.from("booking_status_events").insert({
+    booking_id: data.id, from_status: null, to_status: input.status,
+    note: "Created in the admin panel", created_by: adminUser.email,
+  });
   return data.id as string;
 }
 
@@ -185,26 +233,27 @@ export async function getDashboardMetrics(days = 56) {
   const weekStart = new Date(now); weekStart.setDate(now.getDate() - 7);
   const previousWeekStart = new Date(now); previousWeekStart.setDate(now.getDate() - 14);
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-  const [enquiries, initialBookings, events] = await Promise.all([
-    admin.from("enquiries").select("id,car_slug,status,source,utm_source,created_at").gte("created_at", from.toISOString()),
-    admin.from("bookings").select("id,status,amount_total,vehicle_id,start_at,created_at,vehicle:vehicles(registration_number,display_name)").gte("created_at", from.toISOString()),
+  const [initialBookings, events] = await Promise.all([
+    admin.from("bookings").select("id,car_slug,status,amount_total,vehicle_id,start_at,created_at,vehicle:vehicles(registration_number,display_name)").gte("created_at", from.toISOString()),
     admin.from("events").select("name,utm_source,referrer,created_at").gte("created_at", from.toISOString()),
   ]);
   let bookings = initialBookings;
   if (isMissingSchema(initialBookings.error)) {
-    bookings = await admin.from("bookings").select("id,status,amount_total,start_date,created_at").gte("created_at", from.toISOString()) as typeof initialBookings;
+    bookings = await admin.from("bookings").select("id,car_slug,status,amount_total,start_date,created_at").gte("created_at", from.toISOString()) as typeof initialBookings;
   }
-  if (enquiries.error) throw enquiries.error;
   if (bookings.error) throw bookings.error;
   if (events.error) throw events.error;
-  const enquiryRows = enquiries.data || [];
   const bookingRows = bookings.data || [];
   const eventRows = events.data || [];
-  const thisWeek = enquiryRows.filter((row) => new Date(row.created_at) >= weekStart).length;
-  const lastWeek = enquiryRows.filter((row) => new Date(row.created_at) >= previousWeekStart && new Date(row.created_at) < weekStart).length;
+  const thisWeek = bookingRows.filter((row) => new Date(row.created_at) >= weekStart).length;
+  const lastWeek = bookingRows.filter((row) => new Date(row.created_at) >= previousWeekStart && new Date(row.created_at) < weekStart).length;
   const completed = bookingRows.filter((row) => row.status === "completed");
   const revenueThisMonth = completed.filter((row) => new Date(row.created_at) >= monthStart).reduce((sum, row) => sum + asNumber(row.amount_total), 0);
   const activeBookings = bookingRows.filter((row) => row.status === "confirmed" || row.status === "ongoing").length;
+  const pendingBookings = bookingRows.filter((row) => row.status === "requested").length;
+  // A request that reached any committed state counts as converted; a request
+  // still sitting in the inbox does not.
+  const convertedBookings = bookingRows.filter((row) => BLOCKING_STATUSES.includes(row.status as BookingStatus)).length;
   const vehicleRevenue = new Map<string, { label: string; value: number }>();
   completed.forEach((row) => {
     if (!row.vehicle_id) return;
@@ -215,35 +264,33 @@ export async function getDashboardMetrics(days = 56) {
     vehicleRevenue.set(row.vehicle_id, current);
   });
   const weekBuckets = new Map<string, number>();
-  enquiryRows.forEach((row) => {
+  bookingRows.forEach((row) => {
     const date = new Date(row.created_at); const day = date.getUTCDay();
     date.setUTCDate(date.getUTCDate() - ((day + 6) % 7));
     const key = date.toISOString().slice(0, 10); weekBuckets.set(key, (weekBuckets.get(key) || 0) + 1);
   });
   const carCounts = new Map<string, number>();
-  enquiryRows.forEach((row) => carCounts.set(row.car_slug, (carCounts.get(row.car_slug) || 0) + 1));
+  bookingRows.forEach((row) => carCounts.set(row.car_slug, (carCounts.get(row.car_slug) || 0) + 1));
   const sourceCounts = new Map<string, number>();
-  const sourceEvents = eventRows.filter((row) => row.name === "page_view");
-  if (sourceEvents.length) {
-    sourceEvents.forEach((row) => {
-      let source = row.utm_source || "direct";
-      if (!row.utm_source && row.referrer) {
-        try { source = new URL(row.referrer).hostname.replace(/^www\./, ""); } catch { source = row.referrer.slice(0, 50); }
-      }
-      sourceCounts.set(source, (sourceCounts.get(source) || 0) + 1);
-    });
-  } else {
-    enquiryRows.forEach((row) => { const source = row.utm_source || row.source || "direct"; sourceCounts.set(source, (sourceCounts.get(source) || 0) + 1); });
-  }
+  eventRows.filter((row) => row.name === "page_view").forEach((row) => {
+    let source = row.utm_source || "direct";
+    if (!row.utm_source && row.referrer) {
+      try { source = new URL(row.referrer).hostname.replace(/^www\./, ""); } catch { source = row.referrer.slice(0, 50); }
+    }
+    sourceCounts.set(source, (sourceCounts.get(source) || 0) + 1);
+  });
   const eventCount = (name: string) => eventRows.filter((row) => row.name === name).length;
   return {
     thisWeek, lastWeek, weekChange: lastWeek ? Math.round(((thisWeek - lastWeek) / lastWeek) * 100) : thisWeek ? 100 : 0,
-    conversionRate: enquiryRows.length ? Math.round((completed.length / enquiryRows.length) * 100) : 0,
-    revenueThisMonth, activeBookings,
+    conversionRate: bookingRows.length ? Math.round((convertedBookings / bookingRows.length) * 100) : 0,
+    revenueThisMonth, activeBookings, pendingBookings,
     trend: [...weekBuckets.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([label, value]) => ({ label, value })),
     funnel: [
-      { label: "Page views", value: eventCount("page_view") }, { label: "Enquiry started", value: eventCount("enquiry_started") },
-      { label: "Submitted", value: eventCount("enquiry_submitted") }, { label: "Booked", value: bookingRows.length },
+      { label: "Page views", value: eventCount("page_view") },
+      { label: "Booking started", value: eventCount("booking_started") },
+      { label: "Dates chosen", value: eventCount("booking_dates_selected") },
+      { label: "Requested", value: bookingRows.length },
+      { label: "Confirmed", value: convertedBookings },
     ],
     topCars: [...carCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([slug, value]) => ({ slug, value })),
     sources: [...sourceCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([label, value]) => ({ label, value })),

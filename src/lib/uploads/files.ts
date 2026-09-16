@@ -3,6 +3,7 @@ export type UploadLimits = { maxFiles: number; maxBytes: number; allowedMime: re
 
 export const DOCUMENT_LIMITS: UploadLimits = { maxFiles: 1, maxBytes: 12 * 1024 * 1024, allowedMime: ["application/pdf", "image/jpeg", "image/png", "image/webp"] };
 export const MEDIA_LIMITS: UploadLimits = { maxFiles: 6, maxBytes: 8 * 1024 * 1024, allowedMime: ["application/pdf", "image/jpeg", "image/png", "image/webp"] };
+export const PHOTO_LIMITS: UploadLimits = { maxFiles: 6, maxBytes: 8 * 1024 * 1024, allowedMime: ["image/jpeg", "image/png", "image/webp"] };
 
 export function validateUploads(files: UploadDescriptor[], limits: UploadLimits) {
   const errors: string[] = [];
@@ -23,6 +24,10 @@ export function extensionFor(mime: string) {
 
 export function objectKeyForDocument(vehicleId: string, documentId: string, mime: string) {
   return `vehicles/${vehicleId}/${documentId}.${extensionFor(mime)}`;
+}
+
+export function objectKeyForVehiclePhoto(vehicleId: string, photoId: string, mime: string) {
+  return `vehicles/${vehicleId}/photos/${photoId}.${extensionFor(mime)}`;
 }
 
 export function objectKeyForMedia(bookingId: string, phase: string, mediaType: string, mediaId: string, mime: string) {

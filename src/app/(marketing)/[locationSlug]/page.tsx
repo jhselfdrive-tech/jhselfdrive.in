@@ -5,7 +5,7 @@ import { BadgeCheck, Info, MapPin, Route } from "lucide-react";
 import { site } from "@/content/site";
 import { carContent } from "@/content/cars";
 import { findLocation, locations, locationSlugs } from "@/content/locations";
-import { EnquirySection } from "@/components/sections/EnquirySection";
+import { BookingSection } from "@/components/sections/BookingSection";
 import { FaqSection } from "@/components/sections/FaqSection";
 import { FinalCta } from "@/components/sections/FinalCta";
 import { HowItWorks } from "@/components/sections/HowItWorks";
@@ -53,7 +53,7 @@ export default async function LocationPage(props: PageProps<"/[locationSlug]">) 
     <section className="section"><div className="shell copy-block"><span className="eyebrow">Local notes</span><h2 className="section-title">Worth knowing before you set off.</h2><ul className="note-list">{location.localNotes.map((note) => <li key={note}>{note}</li>)}</ul></div></section>
 
     <HowItWorks />
-    <EnquirySection defaultCarSlug={location.recommendedCar} title={`Planning a trip to ${location.city}?`} copy={`Send your dates and route. The form is set to the ${car.name}, which is what we usually suggest for ${location.city} — change it if you prefer.`} />
+    <BookingSection category={location.recommendedCar} title={`Book a car for ${location.city}`} copy={`Pick your dates and see every car free for that window. The ${car.name} is a popular choice for ${location.city}. Zero advance payment online.`} />
     <FaqSection items={location.faq} title={`${location.city} questions.`} copy="Anything specific to your route, just ask on WhatsApp." />
 
     <section className="section"><div className="shell copy-block"><span className="eyebrow">Also useful</span><h2 className="section-title">Keep looking.</h2><div className="area-list"><Link className="area-chip" href="/">Self-drive cars in Ramanathapuram</Link><Link className="area-chip" href={`/cars/${car.slug}`}>{carContent[car.slug].h1} details</Link>{nearby.map((item) => <Link className="area-chip" href={`/${item.slug}`} key={item.slug}>Self-drive cars in {item.city}</Link>)}</div></div></section>
