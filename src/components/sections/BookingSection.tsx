@@ -46,7 +46,7 @@ export function BookingSection({
         <div className="booking-cta-card">
           <span className="booking-cta-icon"><CalendarCheck size={30} /></span>
           <h3>Check availability</h3>
-          <p>Pick your dates on the next screen and browse every available car in one full-width view.</p>
+          <p>Choose your pickup and return dates to see available cars and your trip price.</p>
           <Link className="button button-teal booking-cta-button" href={href}>
             Book a car <ArrowRight size={18} />
           </Link>

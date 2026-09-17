@@ -4,6 +4,7 @@ import { JsonLd } from "@/components/JsonLd";
 import { site } from "@/content/site";
 import { businessGraph } from "@/lib/seo/schema";
 import "./globals.css";
+import "./design.css";
 
 // No `alternates.canonical` here on purpose: a canonical set on the root layout is
 // inherited by every page that forgets its own, silently pointing sub-pages at "/".
@@ -15,7 +16,7 @@ export const metadata: Metadata = {
   ...(process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION ? { verification: { google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION } } : {}),
 };
 
-export const viewport: Viewport = { themeColor: "#0d665d", width: "device-width", initialScale: 1 };
+export const viewport: Viewport = { themeColor: "#f8f9f4", width: "device-width", initialScale: 1 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (

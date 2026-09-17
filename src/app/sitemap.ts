@@ -16,6 +16,8 @@ export default function sitemap(): MetadataRoute.Sitemap {
     entry("/", 1, "weekly", new Date()),
     entry("/booking", 0.9, "weekly", new Date()),
     entry("/cars", 0.8, "monthly", new Date()),
+    entry("/self-drive-car-rental-madurai", 0.7, "monthly", new Date("2026-09-17")),
+    entry("/outstation-self-drive-car-rental", 0.7, "monthly", new Date("2026-09-17")),
     ...site.fleet.map((car) => entry(`/cars/${car.slug}`, 0.8, "monthly", new Date(carContent[car.slug].updatedAt))),
     ...locations.map((location) => entry(`/${location.slug}`, 0.7, "monthly", new Date(location.updatedAt))),
   ];

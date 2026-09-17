@@ -2,7 +2,7 @@ export const site = {
   name: "JH Self Drive",
   shortName: "JH",
   tagline: "Your road. Your time.",
-  description: "Clean, reliable self-drive cars in Ramanathapuram. Book directly in a minute with zero upfront online payment and continue on WhatsApp.",
+  description: "Self-drive car rental in Ramanathapuram (Ramnad). Find hatchbacks, SUVs and 7-seaters for local and Rameswaram trips. Check dates and pay at pickup.",
   phoneDisplay: "+91 93602 24137",
   phoneE164: "+919360224137",
   whatsappNumber: "919360224137",
@@ -24,6 +24,8 @@ export const site = {
     { title: "Refundable deposit", detail: "Amount confirmed before you book" },
   ],
   faq: [
+    { question: "Do you offer self-drive cars in Ramnad?", answer: "Yes. Ramnad is another name for Ramanathapuram, where JH Self Drive is based. Choose a hatchback, SUV or 7-seater, check your dates, and confirm your pickup with our team." },
+    { question: "Can I book a self-drive car for Rameshwaram or Madurai?", answer: "We offer cars from our Ramanathapuram base for Rameswaram (also written Rameshwaram) trips. For Madurai or another district, share your itinerary so our team can confirm the permitted route, mileage and pickup arrangements before you book." },
     { question: "How do I book a self-drive car?", answer: "Select your dates and preferred car on our fleet booking form. Your reservation is submitted directly, and you can confirm with our team instantly on WhatsApp." },
     { question: "Do I need to make an advance payment online?", answer: "No online payment is required. You pay the rental and refundable security deposit via UPI or cash during vehicle pickup in Ramanathapuram." },
     { question: "Is fuel included in the rental price?", answer: "Fuel is not included. You receive the car at a recorded fuel level and return it at the same level." },

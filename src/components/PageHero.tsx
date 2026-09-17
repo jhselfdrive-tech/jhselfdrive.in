@@ -3,8 +3,7 @@ import type { Crumb } from "@/lib/seo/schema";
 
 type Props = { eyebrow?: string; title: React.ReactNode; lede?: string; crumbs?: readonly Crumb[]; meta?: string[]; children?: React.ReactNode };
 
-// The site header is `position: absolute; color: white` over the homepage's dark hero, so
-// every sub-page has to open with a dark band or the nav is invisible. That is this component.
+// Shared introduction for vehicle and destination pages.
 export function PageHero({ eyebrow, title, lede, crumbs, meta, children }: Props) {
   return <section className="page-hero" id="top"><div className="shell page-hero-inner">
     {crumbs?.length ? <Breadcrumbs crumbs={crumbs} /> : null}

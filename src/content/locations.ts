@@ -38,9 +38,9 @@ export const locations: Location[] = [
     driveTime: "about 1 hour 15 minutes",
     route: "NH87 east through Mandapam, then across the Pamban road bridge onto the island",
     title: "Self Drive Car Rental for Rameswaram",
-    description: "Self-drive cars from Ramanathapuram for Rameswaram trips. Drive the Pamban bridge, reach the temple before dawn and continue to Dhanushkodi at your own pace.",
+    description: "Self-drive car rental for Rameswaram (Rameshwaram), Pamban and Dhanushkodi trips, with pickup in Ramanathapuram. Compare cars and check your dates.",
     h1: "Self-drive cars for your Rameswaram trip",
-    lede: "Pick up in Ramanathapuram, cross the Pamban bridge and keep the car for as long as the island holds you.",
+    lede: "Planning Rameswaram, also written Rameshwaram? Pick up your self-drive car in Ramanathapuram (Ramnad), then explore Pamban and the island at your own pace.",
     intro: [
       "Rameswaram sits about 55 kilometres east of our Ramanathapuram base — roughly an hour and a quarter of driving, most of it straight and open, finishing with the crossing over the Pamban road bridge. It is one of the few drives in Tamil Nadu where the road itself is part of the reason people go, and it is a very different experience behind your own wheel than it is from the back of a hired taxi.",
       "The case for self-drive here is mostly about time of day. The Ramanathaswamy temple rewards an early arrival, and the twenty-two theerthams inside are far more manageable before the middle of the morning. A car you control means leaving Ramanathapuram at four in the morning without negotiating a night rate, and it means staying for the evening aarti without watching a meter.",
@@ -72,8 +72,8 @@ export const locations: Location[] = [
       { question: "Is it better to do Rameswaram as a day trip or keep the car overnight?", answer: "Most people who want both the sunrise darshan and Dhanushkodi in decent light keep the car for two days. A single day works if you leave Ramanathapuram before 5 AM and skip the far end of the island." },
     ],
     recommendedCar: "compact-suv",
-    keywords: ["self drive car rental Rameswaram", "self drive cars Rameswaram", "car rental Rameswaram Tamil Nadu", "Rameswaram Dhanushkodi self drive"],
-    updatedAt: "2026-09-09",
+    keywords: ["self drive car rental Rameswaram", "self drive cars Rameshwaram", "Ramanathapuram to Rameswaram car rental", "Rameswaram Dhanushkodi self drive"],
+    updatedAt: "2026-09-17",
   },
   {
     slug: "self-drive-cars-in-paramakudi",

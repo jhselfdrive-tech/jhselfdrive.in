@@ -1,12 +1,13 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
-import { CalendarCheck, CarFront, Fuel, Gauge, LoaderCircle, Search, Users } from "lucide-react";
+import { CalendarCheck, CarFront, Fuel, Gauge, LoaderCircle, MessageCircle, Phone, Search, Users } from "lucide-react";
 import { getAvailableFleetAction, type AvailabilityState } from "@/app/actions/fleet-availability";
 import type { BookableVehicle } from "@/lib/fleet/public";
 import { trackOnce } from "@/lib/analytics";
 import { site } from "@/content/site";
 import { BookingDialog } from "./BookingDialog";
+import { businessWhatsAppUrl } from "@/lib/messages/whatsapp";
 
 /** A `datetime-local` value N days out, at a fixed IST wall-clock hour. */
 function localAt(offsetDays: number, time: string) {
@@ -18,8 +19,8 @@ function localAt(offsetDays: number, time: string) {
 const categoryName = (slug: string) => site.fleet.find((car) => car.slug === slug)?.name || slug;
 
 export function BookingExperience({ initialCategory = "" }: { initialCategory?: string }) {
-  const [pickupAt, setPickupAt] = useState(() => localAt(0, "09:00"));
-  const [returnAt, setReturnAt] = useState(() => localAt(1, "18:00"));
+  const [pickupAt, setPickupAt] = useState(() => localAt(1, "09:00"));
+  const [returnAt, setReturnAt] = useState(() => localAt(2, "09:00"));
   const [picked, setPicked] = useState<{ vehicle: BookableVehicle; windowKey: string } | null>(null);
   const [category, setCategory] = useState(initialCategory);
 
@@ -32,7 +33,11 @@ export function BookingExperience({ initialCategory = "" }: { initialCategory?: 
   // A fresh search invalidates the open dialog's quote, so the pick is keyed to
   // the window it was made in rather than reset from an effect.
   const windowKey = `${availability.window?.startAt || ""}|${availability.window?.endAt || ""}`;
-  const chosen = picked && picked.windowKey === windowKey ? picked.vehicle : null;
+  const datesMatch = Boolean(availability.window
+    && new Date(pickupAt + ":00+05:30").getTime() === new Date(availability.window.startAt).getTime()
+    && new Date(returnAt + ":00+05:30").getTime() === new Date(availability.window.endAt).getTime());
+  const currentResults = datesMatch && !searching;
+  const chosen = currentResults && picked && picked.windowKey === windowKey ? picked.vehicle : null;
 
   const all = availability.vehicles || [];
   const categories = [...new Set(all.map((vehicle) => vehicle.categorySlug))];
@@ -40,6 +45,11 @@ export function BookingExperience({ initialCategory = "" }: { initialCategory?: 
 
   return <section className="section booking-page">
     <div className="shell">
+      <ol className="booking-progress" aria-label="Booking progress">
+        <li aria-current={!currentResults ? "step" : undefined}><span>1</span> Your dates</li>
+        <li aria-current={currentResults && !chosen ? "step" : undefined}><span>2</span> Choose a car</li>
+        <li aria-current={chosen ? "step" : undefined}><span>3</span> Your details</li>
+      </ol>
       <form className="booking-searchbar" action={searchAction} onFocus={() => trackOnce("booking_started")}>
         <div className="booking-field">
           <label htmlFor="pickupAt">Pickup date &amp; time</label>
@@ -48,7 +58,11 @@ export function BookingExperience({ initialCategory = "" }: { initialCategory?: 
             onChange={(event) => {
               setPickupAt(event.target.value);
               // Keep the window valid without a second interaction.
-              if (event.target.value && returnAt <= event.target.value) setReturnAt(`${event.target.value.slice(0, 10)}T18:00`);
+              if (event.target.value && returnAt <= event.target.value) {
+                const nextDay = new Date(event.target.value + ":00Z");
+                nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+                setReturnAt(nextDay.toISOString().slice(0, 16));
+              }
             }} />
         </div>
         <div className="booking-field">
@@ -62,8 +76,10 @@ export function BookingExperience({ initialCategory = "" }: { initialCategory?: 
         </button>
       </form>
 
+      {availability.fieldErrors?.pickupAt ? <p className="booking-error booking-error-block" role="alert">{availability.fieldErrors.pickupAt[0]}</p> : null}
       {availability.fieldErrors?.returnAt ? <p className="booking-error booking-error-block" role="alert">{availability.fieldErrors.returnAt[0]}</p> : null}
       {availability.message ? <p className="booking-note booking-note-warning" role="status">{availability.message}</p> : null}
+      {availability.ok && !datesMatch ? <p className="booking-note booking-note-warning" role="status">Your dates have changed. Select “Show available cars” to refresh availability and prices.</p> : null}
 
       {!availability.ok && !availability.message ? <div className="booking-empty-state">
         <CalendarCheck size={34} />
@@ -71,15 +87,15 @@ export function BookingExperience({ initialCategory = "" }: { initialCategory?: 
         <p>We&apos;ll check the whole fleet and show only the cars genuinely free for that window — no phone calls to find out.</p>
       </div> : null}
 
-      {availability.ok && all.length ? <>
+      {availability.ok && currentResults && all.length ? <>
         <div className="booking-results-bar">
           <div>
             <strong>{visible.length} car{visible.length === 1 ? "" : "s"} available</strong>
             <small>{availability.window?.pickupLabel} → {availability.window?.returnLabel}</small>
           </div>
           {categories.length > 1 ? <div className="booking-filters" role="group" aria-label="Filter by car type">
-            <button type="button" className={category ? "" : "active"} onClick={() => setCategory("")}>All cars</button>
-            {categories.map((slug) => <button type="button" key={slug} className={category === slug ? "active" : ""} onClick={() => setCategory(slug)}>
+            <button type="button" aria-pressed={!category} className={category ? "" : "active"} onClick={() => setCategory("")}>All cars</button>
+            {categories.map((slug) => <button type="button" aria-pressed={category === slug} key={slug} className={category === slug ? "active" : ""} onClick={() => setCategory(slug)}>
               {categoryName(slug)}
             </button>)}
           </div> : null}
@@ -120,6 +136,7 @@ export function BookingExperience({ initialCategory = "" }: { initialCategory?: 
           No {categoryName(category)} is free for those dates. <button type="button" className="booking-inline-button" onClick={() => setCategory("")}>Show all available cars</button>
         </p> : null}
       </> : null}
+      <div className="booking-help"><span>Need a hand with your booking?</span><a href={`tel:${site.phoneE164}`}><Phone size={14} /> Call our team</a><a href={businessWhatsAppUrl()} target="_blank" rel="noreferrer"><MessageCircle size={14} /> WhatsApp us</a></div>
     </div>
 
     {chosen && availability.window ? <BookingDialog
