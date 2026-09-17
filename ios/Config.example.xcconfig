@@ -1,0 +1,18 @@
+// Copy to Config.xcconfig and fill in.
+//
+//   cp ios/Config.example.xcconfig ios/Config.xcconfig
+//
+// IMPORTANT: these are HOSTNAMES, not URLs — do not add "https://".
+// In an xcconfig file "//" begins a comment, so a pasted URL is silently
+// truncated at the slashes and the app ends up with "https:" as its base.
+// The scheme is added in code instead.
+//
+// All three values are already public in the website's client bundle, so none
+// of them is a secret. DEVELOPMENT_TEAM is your 10-character Apple Team ID —
+// set it HERE rather than in the Xcode UI, which only applies it to one target
+// and leaves the widget and notification extension unsigned.
+
+OPS_API_HOST = jhselfdrive.in
+SUPABASE_HOST = YOUR-PROJECT.supabase.co
+SUPABASE_PUBLISHABLE_KEY = sb_publishable_xxxxxxxxxxxxxxxxxxxx
+DEVELOPMENT_TEAM =

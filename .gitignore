@@ -11,3 +11,8 @@ coverage/
 .vercel/
 supabase/.temp/
 next-env.d.ts
+
+# The iOS app config holds the developer team id; keep it local.
+ios/Config.xcconfig
+ios/JHOps.xcodeproj/
+ios/build/

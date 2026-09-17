@@ -2,11 +2,12 @@
 
 import { getSupabaseAdmin } from "@/lib/supabase-server";
 import { directBookingSchema, istTimestamp } from "@/lib/validation";
-import { formatIstDateTime } from "@/lib/messages/format";
 import { requestIpHash } from "@/lib/rate-limit";
 import { businessWhatsAppUrl } from "@/lib/messages/whatsapp";
 import { createCustomerBookingMessage } from "@/lib/messages/templates";
 import { queueMessageForBooking } from "@/lib/admin/messages";
+import { notifyAdmins } from "@/lib/push/notify";
+import { formatInr, formatIstDateTime } from "@/lib/messages/format";
 
 export type BookingState = {
   ok: boolean;
@@ -87,6 +88,16 @@ export async function submitDirectBooking(_: BookingState, formData: FormData): 
     const returnLabel = formatIstDateTime(endAtStr);
     const amountTotal = Number(row.amount_total);
     const deposit = Number(row.deposit);
+
+    // Push it to the operator's phone immediately. Also guarded: a failure to
+    // notify must never lose the customer their booking.
+    await notifyAdmins({
+      dedupeKey: `request:${row.booking_id}`,
+      kind: "request",
+      title: "New booking request",
+      body: `${data.fullName} · ${carName} · ${pickupLabel} · ${formatInr(Number(row.amount_total))}`,
+      bookingId: row.booking_id,
+    }).catch((error) => { console.error("Notifying admins of the new request failed", error); });
 
     return {
       ok: true,
