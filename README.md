@@ -47,7 +47,8 @@ Reports are cached for 15 minutes and the realtime counter for 1 minute, so the 
 
 ## Before launch
 
-- Replace all `TODO` values in `src/content/site.ts`.
+- Confirm the business address, opening hours and service areas in `src/content/site.ts` match the Google Business Profile exactly.
+- Confirm the route distances and pickup wording marked `TODO(owner)` in `src/content/locations.ts`.
 - Rotate the credential previously committed in `initial.md`; it remains in Git history.
 - Set all `.env.example` variables in Vercel and connect `jhselfdrive.in`.
 - Verify RLS using the browser anon client, GA4 DebugView and the repeat-phone enquiry scenario from the product brief.
@@ -55,6 +56,19 @@ Reports are cached for 15 minutes and the realtime counter for 1 minute, so the 
 ## Vercel deployment
 
 The root `vercel.json` explicitly selects Next.js and uses `npm ci` followed by `npm run build`. In the Vercel project, keep **Root Directory** empty (repository root), set the production branch to `main`, add the variables from `.env.example`, then redeploy. Secret values belong in Vercel Project Settings and must not be committed to this repository.
+
+### Connect `jhselfdrive.in` from GoDaddy
+
+1. In GoDaddy, complete the registrant email/contact verification first. A domain in `clientHold` status is not published in DNS.
+2. In **Vercel → Project → Settings → Domains**, add `jhselfdrive.in`, then also add `www.jhselfdrive.in`.
+3. Make `jhselfdrive.in` the production domain and configure `www.jhselfdrive.in` to redirect to it. This matches the canonical URL used throughout the app.
+4. In **GoDaddy → Domain Portfolio → jhselfdrive.in → DNS**, enter the exact records Vercel shows. Normally the apex record is `A`, host `@`, value `76.76.21.21`; `www` is a `CNAME` whose value is the project-specific `*.vercel-dns-*.com` target shown by Vercel. Remove only conflicting `@` A/AAAA and `www` A/CNAME records—preserve MX/TXT records used for email or verification.
+5. In **Vercel → Settings → Environment Variables**, set `NEXT_PUBLIC_SITE_URL` to `https://jhselfdrive.in` for Production. Set `NEXT_PUBLIC_GOOGLE_MAPS_URL` to the Google Business Profile's exact share URL and redeploy.
+6. Wait for Vercel to show **Valid Configuration**. Vercel provisions HTTPS automatically after DNS validates.
+7. Verify `https://jhselfdrive.in`, `https://jhselfdrive.in/robots.txt`, and `https://jhselfdrive.in/sitemap.xml`. Confirm `https://www.jhselfdrive.in` redirects once to the apex domain.
+8. Add `jhselfdrive.in` as a **Domain property** in Google Search Console using its DNS TXT record, then submit `https://jhselfdrive.in/sitemap.xml`.
+
+Do not add a separate page that duplicates the homepage solely to target “self drive car rental Ramanathapuram”; the homepage already owns that search intent. The town pages in `src/content/locations.ts` cover distinct service areas with original copy.
 
 ## Security model
 

@@ -15,6 +15,8 @@ export function businessGraph() {
       "@context": "https://schema.org", "@type": "AutoRental", "@id": BUSINESS_ID,
       name: site.name, description: site.description, url: site.siteUrl, logo: absoluteUrl("/icon"), image: absoluteUrl("/opengraph-image"),
       telephone: site.phoneE164, email: site.email,
+      hasMap: site.googleMapsUrl,
+      ...(process.env.NEXT_PUBLIC_GOOGLE_MAPS_URL ? { sameAs: [site.googleMapsUrl] } : {}),
       address: { "@type": "PostalAddress", streetAddress: site.address, addressLocality: "Ramanathapuram", addressRegion: "Tamil Nadu", postalCode: "623501", addressCountry: "IN" },
       geo: { "@type": "GeoCoordinates", latitude: 9.3639, longitude: 78.8395 },
       areaServed: site.serviceAreas.map((name) => ({ "@type": "City", name })),

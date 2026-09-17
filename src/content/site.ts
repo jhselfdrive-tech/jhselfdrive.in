@@ -10,6 +10,7 @@ export const site = {
   address: "Ramanathapuram, Tamil Nadu 623501",
   hours: "Open daily · 7:00 AM–10:00 PM",
   siteUrl: process.env.NEXT_PUBLIC_SITE_URL || "https://jhselfdrive.in",
+  googleMapsUrl: process.env.NEXT_PUBLIC_GOOGLE_MAPS_URL || "https://www.google.com/maps/search/?api=1&query=JH%20Self%20Drive%20Ramanathapuram",
   serviceAreas: ["Ramanathapuram", "Rameswaram", "Paramakudi", "Mandapam", "Keelakarai"],
   fleet: [
     { slug: "city-hatchback", name: "City Hatchback", example: "Swift or similar", transmission: "Manual", seats: 5, fuel: "Petrol", dayRate: 1800, kmRate: 12, accent: "coral" },
