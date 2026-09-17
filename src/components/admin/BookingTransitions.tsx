@@ -2,18 +2,17 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Copy, LoaderCircle, MessageCircle, RotateCcw, Send } from "lucide-react";
+import { Check, LoaderCircle, RotateCcw } from "lucide-react";
 import {
-  markMessageSentAction,
   setDepositReturnedAction,
   transitionBookingAction,
   type BookingActionState,
 } from "@/app/admin/actions/bookings";
-import { composeMessage, type MessageContext, type MessageTemplateId } from "@/lib/messages/templates";
-import { whatsAppUrl } from "@/lib/messages/whatsapp";
 import { nextStatuses, STATUS_LABEL, transitionLabel, type BookingStatus } from "@/lib/bookings/status";
+import type { QueuedMessage } from "@/lib/admin/messages";
 import { VehicleSelect } from "./VehicleSelect";
 import { Modal } from "./Modal";
+import { BookingMessagePrompt } from "./BookingMessagePrompt";
 
 function toLocalInput(iso: string) {
   const formatter = new Intl.DateTimeFormat("sv-SE", {
@@ -22,53 +21,13 @@ function toLocalInput(iso: string) {
   return formatter.format(new Date(iso)).replace(" ", "T");
 }
 
-/** Shown after a successful transition so the operator can send the message. */
-function MessageModal({
-  open, onClose, bookingId, templateId, phone, context,
-}: {
-  open: boolean; onClose: () => void; bookingId: string;
-  templateId: MessageTemplateId; phone: string; context: MessageContext;
-}) {
-  const [state, action, pending] = useActionState(markMessageSentAction, {} as BookingActionState);
-  const [copied, setCopied] = useState(false);
-  const closed = useRef(false);
-  const composed = composeMessage(templateId, context);
-
-  // onClose is an inline arrow in the parent, so guard against the effect
-  // re-firing on every subsequent render.
-  useEffect(() => {
-    if (state.success && !closed.current) { closed.current = true; onClose(); }
-  }, [state.success, onClose]);
-
-  return <Modal open={open} onClose={onClose} title="Send the customer an update" subtitle="Opens WhatsApp with this message ready to send.">
-    <pre className="admin-message-preview">{composed.body}</pre>
-    {!composed.isReady ? <p className="admin-field-warning">Missing: {composed.missing.join(", ")}. The message still sends without those lines.</p> : null}
-    <div className="admin-form-actions admin-message-actions">
-      <button type="button" className="admin-secondary-button" onClick={() => {
-        navigator.clipboard.writeText(composed.body).then(() => setCopied(true)).catch(() => undefined);
-      }}><Copy size={14} /> {copied ? "Copied" : "Copy text"}</button>
-      {phone
-        ? <a className="admin-primary-button" href={whatsAppUrl(phone, composed.body)} target="_blank" rel="noreferrer"><MessageCircle size={14} /> Open WhatsApp</a>
-        : <button type="button" className="admin-primary-button" disabled title="No phone number on file"><MessageCircle size={14} /> Open WhatsApp</button>}
-      <form action={action}>
-        <input type="hidden" name="id" value={bookingId} />
-        <input type="hidden" name="templateId" value={templateId} />
-        <button className="admin-secondary-button" type="submit" disabled={pending}>
-          {pending ? <LoaderCircle size={14} className="animate-spin" /> : <Send size={14} />} Mark as sent
-        </button>
-      </form>
-    </div>
-    {state.message && !state.success ? <p className="admin-form-error" role="alert">{state.message}</p> : null}
-  </Modal>;
-}
-
 /** One legal next status, with the extra fields that edge needs. */
 function TransitionForm({
   booking, to, onDone,
 }: {
   booking: { id: string; status: BookingStatus; car_slug: string; start_at: string; end_at: string; vehicle_id: string | null; amount_total: number; deposit: number };
   to: BookingStatus;
-  onDone: (templateId: string | undefined) => void;
+  onDone: (queued: QueuedMessage | undefined) => void;
 }) {
   const [state, action, pending] = useActionState(transitionBookingAction, {} as BookingActionState);
   const [requestedOpen, setRequestedOpen] = useState(false);
@@ -84,9 +43,9 @@ function TransitionForm({
   useEffect(() => {
     if (state.success && !notified.current) {
       notified.current = true;
-      onDone(state.templateId);
+      onDone(state.queued);
     }
-  }, [state.success, state.templateId, onDone]);
+  }, [state.success, state.queued, onDone]);
 
   const label = transitionLabel(booking.status, to);
   const simple = !needsVehicle && !needsReason;
@@ -139,8 +98,14 @@ function TransitionForm({
   </>;
 }
 
-function DepositToggle({ bookingId, depositReturned }: { bookingId: string; depositReturned: boolean }) {
+function DepositToggle({
+  bookingId, depositReturned, onDone,
+}: { bookingId: string; depositReturned: boolean; onDone: (queued: QueuedMessage | undefined) => void }) {
   const [state, action, pending] = useActionState(setDepositReturnedAction, {} as BookingActionState);
+  const notified = useRef(false);
+  useEffect(() => {
+    if (state.success && !notified.current) { notified.current = true; onDone(state.queued); }
+  }, [state.success, state.queued, onDone]);
   return <form action={action} className="admin-transition-form">
     <input type="hidden" name="id" value={bookingId} />
     <input type="hidden" name="depositReturned" value={depositReturned ? "false" : "true"} />
@@ -153,19 +118,17 @@ function DepositToggle({ bookingId, depositReturned }: { bookingId: string; depo
 }
 
 export function BookingTransitions({
-  booking, phone, context,
+  booking,
 }: {
   booking: { id: string; status: BookingStatus; car_slug: string; start_at: string; end_at: string; vehicle_id: string | null; amount_total: number; deposit: number; deposit_returned: boolean };
-  phone: string;
-  context: MessageContext;
 }) {
   const router = useRouter();
-  const [pendingTemplate, setPendingTemplate] = useState<MessageTemplateId | null>(null);
+  const [prompt, setPrompt] = useState<QueuedMessage | null>(null);
   const options = nextStatuses(booking.status);
 
-  const handleDone = (templateId: string | undefined) => {
+  const handleDone = (queued: QueuedMessage | undefined) => {
     router.refresh();
-    if (templateId) setPendingTemplate(templateId as MessageTemplateId);
+    if (queued) setPrompt(queued);
   };
 
   return <section className="admin-form-card">
@@ -184,20 +147,13 @@ export function BookingTransitions({
     <div className="admin-transition-row">
       {options.map((to) => <TransitionForm key={to} booking={booking} to={to} onDone={handleDone} />)}
       {booking.deposit > 0 && (booking.status === "completed" || booking.status === "cancelled")
-        ? <DepositToggle bookingId={booking.id} depositReturned={booking.deposit_returned} />
+        ? <DepositToggle bookingId={booking.id} depositReturned={booking.deposit_returned} onDone={handleDone} />
         : null}
       {!options.length && !(booking.deposit > 0) ? <p className="admin-empty">Nothing left to do here.</p> : null}
     </div>
 
-    {pendingTemplate
-      ? <MessageModal
-          open
-          onClose={() => { setPendingTemplate(null); router.refresh(); }}
-          bookingId={booking.id}
-          templateId={pendingTemplate}
-          phone={phone}
-          context={context}
-        />
+    {prompt
+      ? <BookingMessagePrompt queued={prompt} onClose={() => { setPrompt(null); router.refresh(); }} />
       : null}
   </section>;
 }

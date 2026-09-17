@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { AlertTriangle, CalendarX2, CarFront, ClockAlert, FileWarning, ShieldAlert, Trash2 } from "lucide-react";
 import { purgeExpiredMediaAction } from "@/app/admin/actions/handovers";
+import { ReminderRow } from "./ReminderRow";
 import type { getFleetAlerts } from "@/lib/admin/fleet";
 
 type Alerts = Awaited<ReturnType<typeof getFleetAlerts>>;
 
 export function AlertsPanel({ alerts }: { alerts: Alerts }) {
-  const total = alerts.documents.length + alerts.overdue.length + alerts.unassigned.length + alerts.staleRequests.length + alerts.conflicts.length + alerts.checklist.length + alerts.overduePurges.length;
+  const total = alerts.documents.length + alerts.overdue.length + alerts.unassigned.length + alerts.staleRequests.length + alerts.conflicts.length + alerts.checklist.length + alerts.overduePurges.length + alerts.reminders.length;
   if (!total) return <section className="admin-alerts admin-alerts-clear"><CarFront size={20} /><div><strong>Fleet operations are clear</strong><span>No urgent documents, returns, assignments or follow-ups.</span></div></section>;
   return <section className="admin-alerts">
     <div className="admin-alerts-title"><AlertTriangle size={18} /><div><strong>{total} item{total === 1 ? "" : "s"} need attention</strong><span>Operational risks and follow-ups</span></div></div>
@@ -15,6 +16,7 @@ export function AlertsPanel({ alerts }: { alerts: Alerts }) {
       {alerts.overdue.slice(0, 3).map((booking) => <Link href="/admin/bookings" className="admin-alert-row" key={`overdue-${booking.id}`}><ClockAlert size={16} /><span><strong>Overdue ongoing rental</strong><small>Return time passed {new Date(booking.end_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}</small></span></Link>)}
       {alerts.unassigned.slice(0, 3).map((booking) => <Link href="/admin/bookings" className="admin-alert-row" key={`unassigned-${booking.id}`}><CalendarX2 size={16} /><span><strong>Approved booking has no vehicle</strong><small>{booking.car_slug} · starts {new Date(booking.start_at).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}</small></span></Link>)}
       {alerts.staleRequests.slice(0, 3).map((booking) => <Link href={`/admin/bookings/${booking.id}`} className="admin-alert-row" key={`request-${booking.id}`}><AlertTriangle size={16} /><span><strong>Booking request waiting over 24 hours</strong><small>{booking.car_slug} · received {new Date(booking.created_at).toLocaleDateString("en-IN")}</small></span></Link>)}
+      {alerts.reminders.slice(0, 5).map((reminder) => <ReminderRow reminder={reminder} key={`${reminder.bookingId}-${reminder.reminder}-${reminder.onDate}`} />)}
       {alerts.conflicts.slice(0, 3).map((conflict) => <Link href={`/admin/fleet/${conflict.vehicleId}`} className="admin-alert-row" key={`conflict-${conflict.bookingId}`}><CalendarX2 size={16} /><span><strong>{conflict.registrationNumber} booking overlaps a block</strong><small>{conflict.reason} · review the allocation</small></span></Link>)}
       {alerts.checklist.slice(0, 3).map((alert) => <Link href={`/admin/bookings/${alert.bookingId}`} className="admin-alert-row" key={`checklist-${alert.bookingId}`}><ShieldAlert size={16} /><span><strong>{alert.label} checklist has {alert.gaps.length} gap{alert.gaps.length === 1 ? "" : "s"}</strong><small>{alert.gaps.slice(0, 2).join(" · ")}</small></span></Link>)}
       {alerts.overduePurges.length ? <div className="admin-alert-row"><Trash2 size={16} /><span><strong>{alerts.overduePurges.length} retained file{alerts.overduePurges.length === 1 ? "" : "s"} overdue for purge</strong><small>Deletes stored objects first, then database metadata.</small></span><form action={purgeExpiredMediaAction}><input type="hidden" name="confirm" value="purge" /><button className="admin-danger-button" type="submit">Purge</button></form></div> : null}

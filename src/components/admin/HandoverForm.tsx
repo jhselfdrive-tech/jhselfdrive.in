@@ -1,14 +1,27 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { ClipboardCheck, LoaderCircle } from "lucide-react";
 import { saveHandoverAction, type HandoverActionState } from "@/app/admin/actions/handovers";
 import type { BookingHandover, HandoverPhase } from "@/lib/admin/bookings";
 import { odometerWarning } from "@/lib/admin/checklist";
 import { fuelLabel } from "@/lib/messages/format";
+import type { QueuedMessage } from "@/lib/admin/messages";
+import { BookingMessagePrompt } from "./BookingMessagePrompt";
 
 export function HandoverForm({ bookingId, phase, handover, previousOdometer }: { bookingId: string; phase: HandoverPhase; handover?: BookingHandover; previousOdometer?: number | null }) {
   const [state, action, pending] = useActionState(saveHandoverAction, {} as HandoverActionState);
+  const [prompt, setPrompt] = useState<QueuedMessage | null>(null);
+  const handled = useRef<string | null>(null);
+
+  // Saving the checklist is what tells the customer the car is handed over or
+  // back, so prompt for that message as soon as it is queued.
+  useEffect(() => {
+    if (state.success && state.queued && handled.current !== state.queued.id) {
+      handled.current = state.queued.id;
+      setPrompt(state.queued);
+    }
+  }, [state.success, state.queued]);
   const [odometer, setOdometer] = useState(handover?.odometer_km?.toString() || "");
   const warning = odometerWarning(previousOdometer, odometer ? Number(odometer) : undefined);
   return <form action={action} className="admin-form-card admin-handover-form">
@@ -24,6 +37,7 @@ export function HandoverForm({ bookingId, phase, handover, previousOdometer }: {
       <div className="admin-field admin-field-full"><label htmlFor={`${phase}-notes`}>Handover notes</label><textarea id={`${phase}-notes`} name="notes" defaultValue={handover?.notes || ""} /></div>
     </div>
     {state.message ? <p className={state.success ? "admin-form-success" : "admin-form-error"}>{state.message}</p> : null}
+    {prompt ? <BookingMessagePrompt queued={prompt} onClose={() => setPrompt(null)} /> : null}
     <div className="admin-form-actions"><button className="admin-primary-button" type="submit" disabled={pending}>{pending ? <LoaderCircle className="animate-spin" size={15} /> : <ClipboardCheck size={15} />} Save {phase}</button></div>
   </form>;
 }

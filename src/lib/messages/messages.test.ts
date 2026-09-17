@@ -31,6 +31,7 @@ describe("message templates", () => {
     customerName: "Karthick", carLabel: "Compact SUV", vehicleLabel: "White Brezza · TN65AB1234",
     startAt: "2026-09-11T03:30:00Z", endAt: "2026-09-12T12:30:00Z", amountTotal: 4500,
     amountBalance: 2000, depositAmount: 5000, shareUrl: "https://jhselfdrive.in/r/example",
+    amountPaid: 2500, paymentMethod: "UPI", odometerKm: 45210, fuelLabel: "Full",
   };
 
   it("marks booking confirmation incomplete without an assigned vehicle", () => {

@@ -15,8 +15,9 @@ import {
 } from "@/lib/admin/bookings";
 import { DOCUMENTS_BUCKET, IDENTITY_BUCKET, removeObjects, uploadObject } from "@/lib/admin/storage";
 import { MEDIA_LIMITS, objectKeyForMedia, validateUploads } from "@/lib/uploads/files";
+import type { QueuedMessage } from "@/lib/admin/messages";
 
-export type HandoverActionState = { message?: string; success?: boolean; shareUrl?: string };
+export type HandoverActionState = { message?: string; success?: boolean; shareUrl?: string; queued?: QueuedMessage };
 
 const optionalNumber = z.preprocess((value) => value === "" ? undefined : value, z.coerce.number().nonnegative().optional());
 const handoverSchema = z.object({
@@ -41,14 +42,19 @@ function revalidateBooking(id: string) {
 export async function saveHandoverAction(_: HandoverActionState, formData: FormData): Promise<HandoverActionState> {
   const parsed = handoverSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { message: parsed.error.issues[0]?.message || "Check the handover details." };
+  let queued: QueuedMessage | null = null;
   try {
-    await saveHandover({ ...parsed.data, paymentReceived: parsed.data.paymentReceived === "on" });
+    ({ messageId: queued } = await saveHandover({ ...parsed.data, paymentReceived: parsed.data.paymentReceived === "on" }));
   } catch (error) {
     console.error("Handover save failed", error);
     return { message: "Could not save the handover checklist." };
   }
   revalidateBooking(parsed.data.bookingId);
-  return { success: true, message: `${parsed.data.phase === "delivery" ? "Delivery" : "Return"} checklist saved.` };
+  return {
+    success: true,
+    message: `${parsed.data.phase === "delivery" ? "Delivery" : "Return"} checklist saved.`,
+    queued: queued || undefined,
+  };
 }
 
 const mediaSchema = z.object({ bookingId: z.uuid(), phase: z.enum(["delivery", "return"]), mediaType: z.enum(["licence_front", "licence_back", "vehicle_condition"]) });

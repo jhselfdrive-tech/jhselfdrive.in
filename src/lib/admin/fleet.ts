@@ -6,6 +6,7 @@ import { checklistGaps, type ChecklistFacts } from "./checklist";
 import { isMissingSchema } from "./schema";
 import { DOCUMENTS_BUCKET, removeObjects, signObjects } from "./storage";
 import { PHOTOS_BUCKET, publicPhotoUrl } from "@/lib/fleet/photos";
+import { dueReminders } from "./messages";
 
 export type VehicleStatus = "active" | "maintenance" | "retired" | "sold";
 export type DocumentType = "insurance" | "fitness" | "permit" | "puc" | "road_tax";
@@ -321,9 +322,12 @@ export async function getFleetAlerts() {
   if (assignedBookings.error) throw assignedBookings.error;
   if (blocks.error) throw blocks.error;
   const activeBookingIds = (assignedBookings.data || []).map((booking) => booking.id);
-  const [checklists, purges] = await Promise.all([
+  const [checklists, purges, reminders] = await Promise.all([
     activeBookingIds.length ? admin.from("booking_checklist_status").select("*").in("booking_id", activeBookingIds) : Promise.resolve({ data: [], error: null }),
     admin.from("booking_media").select("id,booking_id,purge_after").lt("purge_after", now.toISOString().slice(0, 10)).order("purge_after"),
+    // Time-based customer reminders have no admin action to prompt from, so
+    // they surface here alongside the other operational alerts.
+    dueReminders(),
   ]);
   if (checklists.error && !isMissingSchema(checklists.error)) throw checklists.error;
   if (purges.error && !isMissingSchema(purges.error)) throw purges.error;
@@ -348,6 +352,7 @@ export async function getFleetAlerts() {
     conflicts,
     checklist,
     overduePurges: purges.data || [],
+    reminders,
   };
 }
 

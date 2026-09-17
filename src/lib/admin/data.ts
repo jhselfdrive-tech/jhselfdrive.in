@@ -5,6 +5,8 @@ import { deriveSegments, type Segment } from "./segments";
 import { isMissingSchema } from "./schema";
 import type { ChecklistFacts } from "./checklist";
 import { BLOCKING_STATUSES, type BookingStatus, isBookingStatus, templateForTransition } from "@/lib/bookings/status";
+import { queueMessageForBooking, type QueuedMessage } from "./messages";
+import { recordPayment } from "./payments";
 
 export type { BookingStatus };
 
@@ -90,6 +92,8 @@ export type BookingTransition = {
   from: BookingStatus;
   to: BookingStatus;
   templateId: ReturnType<typeof templateForTransition>;
+  /** The queued customer message to prompt for, if one is outstanding. */
+  message: QueuedMessage | null;
 };
 
 /**
@@ -120,16 +124,27 @@ export async function transitionBooking(input: {
   if (error) throw normaliseRpcError(error);
   const row = (data as Array<{ from_status: string; to_status: string }> | null)?.[0];
   const from = isBookingStatus(row?.from_status) ? row!.from_status : input.to;
-  return { from, to: input.to, templateId: templateForTransition(from, input.to) };
+
+  // Queue the customer notification here rather than in the action, so no
+  // caller of transitionBooking can forget to.
+  const message = await queueMessageForBooking(input.bookingId, { kind: "status", to: input.to }, {
+    note: input.note?.trim() || null,
+  });
+
+  return { from, to: input.to, templateId: templateForTransition(from, input.to), message };
 }
 
-/** Deposit return is a money fact, not a lifecycle edge, so it moves on its own. */
+/**
+ * Deposit return is a money fact, not a lifecycle edge, so it moves on its own.
+ * Marking it returned also records a refund on the ledger, which is what
+ * produces the customer's refund notification.
+ */
 export async function setDepositReturned(bookingId: string, depositReturned: boolean) {
   const adminUser = await verifyAdmin();
   const admin = getSupabaseAdmin();
   const { error } = await admin.from("bookings").update({ deposit_returned: depositReturned }).eq("id", bookingId);
   if (error) throw error;
-  const { data: booking } = await admin.from("bookings").select("status").eq("id", bookingId).maybeSingle();
+  const { data: booking } = await admin.from("bookings").select("status,deposit").eq("id", bookingId).maybeSingle();
   await admin.from("booking_status_events").insert({
     booking_id: bookingId,
     from_status: booking?.status || null,
@@ -137,6 +152,25 @@ export async function setDepositReturned(bookingId: string, depositReturned: boo
     note: depositReturned ? "Deposit returned" : "Deposit marked as held",
     created_by: adminUser.email,
   });
+
+  if (!depositReturned) return null;
+  const held = await depositHeld(bookingId);
+  if (held <= 0) return null;
+  const paymentId = await recordPayment({ bookingId, kind: "refund", amount: held, method: "cash", note: "Deposit returned to customer" });
+  return queueMessageForBooking(bookingId, { kind: "payment", paymentId, paymentKind: "refund" }, {
+    amountPaid: held,
+    depositAmount: held,
+  });
+}
+
+/** Deposit taken minus anything already refunded. */
+async function depositHeld(bookingId: string) {
+  const { data, error } = await getSupabaseAdmin().from("booking_payments").select("kind,amount").eq("booking_id", bookingId);
+  if (error) {
+    if (isMissingSchema(error)) return 0;
+    throw error;
+  }
+  return (data || []).reduce((sum, row) => sum + (row.kind === "deposit" ? Number(row.amount) : row.kind === "refund" ? -Number(row.amount) : 0), 0);
 }
 
 export async function listBookingStatusEvents(bookingId: string) {
@@ -157,20 +191,6 @@ export type BookingStatusEvent = {
   id: string; from_status: string | null; to_status: string; note: string | null;
   message_template_id: string | null; message_sent_at: string | null; created_by: string; created_at: string;
 };
-
-/** Stamps the most recent event for a booking as having had its message sent. */
-export async function markTransitionMessageSent(bookingId: string, templateId: string) {
-  await verifyAdmin();
-  const admin = getSupabaseAdmin();
-  const { data, error } = await admin.from("booking_status_events").select("id").eq("booking_id", bookingId).order("created_at", { ascending: false }).limit(1);
-  if (error) throw error;
-  const latest = data?.[0]?.id;
-  if (!latest) return;
-  const { error: updateError } = await admin.from("booking_status_events")
-    .update({ message_template_id: templateId, message_sent_at: new Date().toISOString() })
-    .eq("id", latest);
-  if (updateError) throw updateError;
-}
 
 /** Turns the RPC's raise-exception messages into codes the actions can map to copy. */
 function normaliseRpcError(error: { message?: string; code?: string }) {

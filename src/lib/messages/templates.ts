@@ -9,9 +9,12 @@ export type MessageTemplateId =
   | "trip_started"
   | "return_complete"
   | "booking_cancelled"
+  | "payment_received"
+  | "deposit_collected"
   | "payment_reminder"
   | "pickup_reminder"
   | "return_due"
+  | "return_overdue"
   | "deposit_refunded";
 
 export type MessageContext = {
@@ -23,6 +26,11 @@ export type MessageContext = {
   amountTotal?: number | null;
   amountBalance?: number | null;
   depositAmount?: number | null;
+  /** The single payment just recorded, for the payment templates. */
+  amountPaid?: number | null;
+  paymentMethod?: string | null;
+  odometerKm?: number | null;
+  fuelLabel?: string | null;
   shareUrl?: string | null;
   note?: string | null;
 };
@@ -103,6 +111,10 @@ export const messageTemplates: Record<MessageTemplateId, Template> = {
       `Hi ${ctx.customerName || "there"}, your ${site.name} handover is complete. Have a great trip! 🛣️`,
       ctx.vehicleLabel && `Vehicle: ${ctx.vehicleLabel}`,
       ctx.endAt && `Return due: ${formatIstDateTime(ctx.endAt)}`,
+      // Recorded at handover, so the customer has our reading in writing too.
+      ctx.odometerKm !== null && ctx.odometerKm !== undefined && `Odometer at pickup: ${ctx.odometerKm.toLocaleString("en-IN")} km`,
+      ctx.fuelLabel && `Fuel at pickup: ${ctx.fuelLabel}`,
+      ctx.amountBalance !== null && ctx.amountBalance !== undefined && ctx.amountBalance > 0 && `Balance still to pay: ${formatInr(ctx.amountBalance)}`,
       `Fuel policy: ${site.pricing.fuel}`,
       `Any issue on the road? Call ${site.phoneDisplay}.`,
     ],
@@ -113,6 +125,10 @@ export const messageTemplates: Record<MessageTemplateId, Template> = {
     requires: [],
     lines: (ctx) => [
       `Hi ${ctx.customerName || "there"}, your vehicle return is complete.`,
+      ctx.odometerKm !== null && ctx.odometerKm !== undefined && `Odometer at return: ${ctx.odometerKm.toLocaleString("en-IN")} km`,
+      ctx.fuelLabel && `Fuel at return: ${ctx.fuelLabel}`,
+      ctx.amountBalance !== null && ctx.amountBalance !== undefined && ctx.amountBalance > 0 && `Balance to settle: ${formatInr(ctx.amountBalance)}`,
+      ctx.depositAmount ? `Refundable deposit of ${formatInr(ctx.depositAmount)} will be returned shortly.` : null,
       `Thank you for choosing ${site.name}. We hope to see you on the road again.`,
     ],
   },
@@ -126,6 +142,44 @@ export const messageTemplates: Record<MessageTemplateId, Template> = {
       ctx.note && `Note: ${ctx.note}`,
       "Reply here whenever you would like to rebook.",
       `Support: ${site.phoneDisplay}`,
+    ],
+  },
+  payment_received: {
+    label: "Payment received",
+    description: "Receipt for one rental payment, with whatever is still outstanding.",
+    requires: ["amountPaid"],
+    lines: (ctx) => [
+      `Hi ${ctx.customerName || "there"}, we have received your payment. Thank you! ✅`,
+      `Amount received: ${formatInr(ctx.amountPaid || 0)}${ctx.paymentMethod ? ` (${ctx.paymentMethod})` : ""}`,
+      ctx.amountTotal !== null && ctx.amountTotal !== undefined && `Total rental: ${formatInr(ctx.amountTotal)}`,
+      ctx.amountBalance !== null && ctx.amountBalance !== undefined && (
+        ctx.amountBalance > 0 ? `Still to pay: ${formatInr(ctx.amountBalance)}` : "Your rental is now fully paid."
+      ),
+      ctx.depositAmount ? `Refundable deposit held: ${formatInr(ctx.depositAmount)}` : null,
+      carLine(ctx),
+      `Support: ${site.phoneDisplay}`,
+    ],
+  },
+  deposit_collected: {
+    label: "Deposit received",
+    description: "Confirm the refundable deposit is held and when it comes back.",
+    requires: ["amountPaid"],
+    lines: (ctx) => [
+      `Hi ${ctx.customerName || "there"}, we have received your refundable deposit of ${formatInr(ctx.amountPaid || 0)}${ctx.paymentMethod ? ` (${ctx.paymentMethod})` : ""}.`,
+      "This is fully refundable and is returned after the vehicle comes back in the same condition.",
+      ctx.amountBalance !== null && ctx.amountBalance !== undefined && ctx.amountBalance > 0 && `Rental still to pay: ${formatInr(ctx.amountBalance)}`,
+      `Support: ${site.phoneDisplay}`,
+    ],
+  },
+  return_overdue: {
+    label: "Return overdue",
+    description: "Chase a vehicle that is past its return time.",
+    requires: ["endAt"],
+    lines: (ctx) => [
+      `Hi ${ctx.customerName || "there"}, your ${site.name} vehicle was due back at ${formatIstDateTime(ctx.endAt!)} and we have not recorded the return yet.`,
+      ctx.vehicleLabel && `Vehicle: ${ctx.vehicleLabel}`,
+      "Please reply with your expected return time. Extra hours may be charged at the daily rate.",
+      `Call us on ${site.phoneDisplay} if you need more time or ran into trouble.`,
     ],
   },
   payment_reminder: {

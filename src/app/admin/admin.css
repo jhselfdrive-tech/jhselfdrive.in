@@ -457,3 +457,45 @@
   .admin-modal-body { max-height: calc(100dvh - 78px); }
   .admin-photo-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
 }
+
+/* ---------- Customer message log ---------- */
+.admin-status-message-sent { background: #e0f1e8; color: #2f6b56; border: 1px solid #b9dccb; }
+.admin-status-message-skipped { background: #eef2f0; color: var(--muted); border: 1px solid var(--line); }
+.admin-status-message-due { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+.admin-message-due-note { margin: 0 0 12px; }
+.admin-message-log { display: grid; gap: 11px; padding: 0; margin: 0; list-style: none; }
+.admin-message-item { padding: 14px; background: #fbfcfb; border: 1px solid var(--line); border-radius: 12px; }
+.admin-message-item.admin-message-due { background: #fffdf5; border-color: #fde68a; }
+.admin-message-item-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.admin-message-item-head strong { display: block; font-size: .76rem; }
+.admin-message-item-head small { display: block; margin-top: 3px; color: var(--muted); font-size: .64rem; }
+.admin-message-item .admin-text-button { margin-top: 8px; color: var(--teal); font-size: .66rem; background: none; }
+.admin-message-item .admin-message-preview { margin-top: 10px; }
+.admin-message-row-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-top: 10px; }
+.admin-message-skip { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+.admin-message-skip-link { display: block; margin-top: 14px; color: var(--muted); font-size: .68rem; background: none; }
+.admin-message-skip-link:hover { color: var(--teal); }
+.admin-adhoc-templates { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); }
+.admin-adhoc-templates > summary { cursor: pointer; font-size: .7rem; font-weight: 800; color: var(--teal); }
+.admin-adhoc-templates > .admin-template-grid { margin-top: 16px; }
+
+/* ---------- Payment ledger ---------- */
+.admin-payment-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 0 0 16px; }
+.admin-payment-summary > div { padding: 11px; background: #f5f8f6; border-radius: 10px; }
+.admin-payment-summary dt { color: var(--muted); font-size: .61rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+.admin-payment-summary dd { margin: 4px 0 0; font-size: .86rem; font-weight: 800; }
+.admin-payment-outstanding { background: #fffdf5; box-shadow: inset 0 0 0 1px #fde68a; }
+.admin-payment-outstanding dd { color: #a46510; }
+.admin-payment-list { display: grid; gap: 8px; padding: 0; margin: 0 0 16px; list-style: none; }
+.admin-payment-list > li { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 11px; background: #fbfcfb; border: 1px solid var(--line); border-radius: 10px; }
+.admin-payment-list strong { display: block; font-size: .76rem; }
+.admin-payment-list small { display: block; margin-top: 3px; color: var(--muted); font-size: .63rem; }
+.admin-payment-form { padding-top: 16px; border-top: 1px solid var(--line); }
+
+/* ---------- Reminder alerts ---------- */
+.admin-alert-reminder { align-items: center; }
+.admin-alert-actions { display: flex; align-items: center; gap: 6px; }
+
+@media (max-width: 760px) {
+  .admin-payment-summary { grid-template-columns: 1fr 1fr; }
+}

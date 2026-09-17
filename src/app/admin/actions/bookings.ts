@@ -3,14 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { createBooking, markTransitionMessageSent, setDepositReturned, transitionBooking } from "@/lib/admin/data";
+import { createBooking, setDepositReturned, transitionBooking } from "@/lib/admin/data";
 import { BOOKING_STATUSES, STATUS_LABEL, type BookingStatus } from "@/lib/bookings/status";
+import type { QueuedMessage } from "@/lib/admin/messages";
 
 export type BookingActionState = {
   message?: string;
   success?: boolean;
-  /** Set when a transition succeeded and the operator should send a message. */
-  templateId?: string;
+  /** Queued customer message to prompt for, when one is outstanding. */
+  queued?: QueuedMessage;
   bookingId?: string;
 };
 
@@ -110,7 +111,7 @@ export async function transitionBookingAction(_: BookingActionState, formData: F
     return {
       success: true,
       bookingId: id,
-      templateId: result.templateId || undefined,
+      queued: result.message || undefined,
       message: `Booking marked ${STATUS_LABEL[result.to].toLowerCase()}.`,
     };
   } catch (error) {
@@ -124,27 +125,21 @@ const depositSchema = z.object({ id: z.uuid(), depositReturned: z.enum(["true", 
 export async function setDepositReturnedAction(_: BookingActionState, formData: FormData): Promise<BookingActionState> {
   const parsed = depositSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { message: "Could not update the deposit." };
+  let queued: QueuedMessage | null = null;
   try {
-    await setDepositReturned(parsed.data.id, parsed.data.depositReturned === "true");
+    queued = await setDepositReturned(parsed.data.id, parsed.data.depositReturned === "true");
   } catch (error) {
     console.error("Deposit update failed", error);
     return { message: "Could not update the deposit." };
   }
   revalidateBooking(parsed.data.id);
-  return { success: true, message: parsed.data.depositReturned === "true" ? "Deposit marked as returned." : "Deposit marked as held." };
+  return {
+    success: true,
+    bookingId: parsed.data.id,
+    queued: queued || undefined,
+    message: parsed.data.depositReturned === "true" ? "Deposit returned and logged." : "Deposit marked as held.",
+  };
 }
 
-const messageSentSchema = z.object({ id: z.uuid(), templateId: z.string().min(1).max(60) });
-
-export async function markMessageSentAction(_: BookingActionState, formData: FormData): Promise<BookingActionState> {
-  const parsed = messageSentSchema.safeParse(Object.fromEntries(formData));
-  if (!parsed.success) return { message: "Could not record that message." };
-  try {
-    await markTransitionMessageSent(parsed.data.id, parsed.data.templateId);
-  } catch (error) {
-    console.error("Marking message sent failed", error);
-    return { message: "Could not record that message." };
-  }
-  revalidateBooking(parsed.data.id);
-  return { success: true, message: "Message recorded as sent." };
-}
+// Message send/skip now lives in actions/messages.ts, against the
+// booking_messages log rather than a stamp on the last status event.

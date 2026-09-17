@@ -6,6 +6,7 @@ import { formatIstDateTime } from "@/lib/messages/format";
 import { requestIpHash } from "@/lib/rate-limit";
 import { businessWhatsAppUrl } from "@/lib/messages/whatsapp";
 import { createCustomerBookingMessage } from "@/lib/messages/templates";
+import { queueMessageForBooking } from "@/lib/admin/messages";
 
 export type BookingState = {
   ok: boolean;
@@ -73,6 +74,11 @@ export async function submitDirectBooking(_: BookingState, formData: FormData): 
 
     const row = (rows as Array<{ booking_id: string; amount_total: number; deposit: number; days: number }> | null)?.[0];
     if (!row) return { ok: false, message: rpcErrorMessage("") };
+
+    // Log the acknowledgement so the admin sees it as outstanding rather than
+    // assuming the customer has heard from us. Never fails the booking.
+    await queueMessageForBooking(row.booking_id, { kind: "status", to: "requested" })
+      .catch((error) => { console.error("Queueing the request acknowledgement failed", error); });
 
     const { data: vehicle } = await supabase.from("vehicles").select("display_name,model,registration_number").eq("id", data.vehicleId).maybeSingle();
     const carName = vehicle?.display_name || vehicle?.model || vehicle?.registration_number || "your car";

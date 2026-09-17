@@ -3,6 +3,7 @@ export type ChecklistFacts = {
   has_return?: boolean | null;
   amount_collected?: number | string | null;
   deposit_collected?: number | string | null;
+  deposit_refunded?: number | string | null;
   delivery_odometer_km?: number | null;
   return_odometer_km?: number | null;
   delivery_fuel_eighths?: number | null;

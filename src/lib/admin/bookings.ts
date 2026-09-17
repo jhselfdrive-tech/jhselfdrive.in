@@ -4,6 +4,8 @@ import { generateShareToken, clampShareExpiry, defaultShareExpiry } from "@/lib/
 import { verifyAdmin } from "./auth";
 import { isMissingSchema } from "./schema";
 import { DOCUMENTS_BUCKET, IDENTITY_BUCKET, removeObjects, signObject, signObjects } from "./storage";
+import { queueMessageForBooking } from "./messages";
+import { fuelLabel } from "@/lib/messages/format";
 
 export type HandoverPhase = "delivery" | "return";
 export type BookingMediaType = "licence_front" | "licence_back" | "vehicle_condition";
@@ -62,7 +64,15 @@ export async function saveHandover(input: {
     p_damage_notes: input.damageNotes, p_notes: input.notes, p_recorded_by: adminUser.email,
   });
   if (error) throw error;
-  return data as string;
+
+  // The delivery checklist and the "trip started" status change are one fact to
+  // the customer, so they share an event key and only the first one queues.
+  const messageId = await queueMessageForBooking(input.bookingId, { kind: "handover", phase: input.phase }, {
+    odometerKm: input.odometerKm ?? null,
+    fuelLabel: fuelLabel(input.fuelEighths),
+  });
+
+  return { handoverId: data as string, messageId };
 }
 
 export async function addBookingMedia(input: Omit<BookingMedia, "created_at" | "uploaded_by" | "signedUrl">) {

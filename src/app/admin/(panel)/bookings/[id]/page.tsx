@@ -2,7 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AlertTriangle, CalendarClock, CircleDollarSign, IndianRupee, Route, ShieldCheck, UserRound } from "lucide-react";
 import { BookingMediaPanel } from "@/components/admin/BookingMediaPanel";
+import { BookingMessageLog } from "@/components/admin/BookingMessageLog";
 import { BookingTransitions } from "@/components/admin/BookingTransitions";
+import { PaymentLedgerPanel } from "@/components/admin/PaymentLedgerPanel";
 import { BookingVehicleAssignment } from "@/components/admin/BookingVehicleAssignment";
 import { HandoverForm } from "@/components/admin/HandoverForm";
 import { MessageTemplates } from "@/components/admin/MessageTemplates";
@@ -11,6 +13,8 @@ import { ShareLinkPanel } from "@/components/admin/ShareLinkPanel";
 import { site } from "@/content/site";
 import { getBookingDetail, type BookingHandover } from "@/lib/admin/bookings";
 import { listBookingStatusEvents } from "@/lib/admin/data";
+import { listBookingMessages } from "@/lib/admin/messages";
+import { listPayments } from "@/lib/admin/payments";
 import { STATUS_LABEL, type BookingStatus } from "@/lib/bookings/status";
 import { messageTemplates, type MessageTemplateId } from "@/lib/messages/templates";
 import { checklistGaps, paymentSummary } from "@/lib/admin/checklist";
@@ -25,7 +29,9 @@ function first<T>(value: T | T[] | null): T | null {
 
 export default async function BookingDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [data, statusEvents] = await Promise.all([getBookingDetail(id), listBookingStatusEvents(id)]);
+  const [data, statusEvents, messages, ledger] = await Promise.all([
+    getBookingDetail(id), listBookingStatusEvents(id), listBookingMessages(id), listPayments(id),
+  ]);
   if (!data) notFound();
 
   const booking = data.booking;
@@ -35,6 +41,8 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
   const returned = data.handovers.find((item) => item.phase === "return");
   const gaps = checklistGaps(data.checklist);
   const payments = paymentSummary({ ...data.checklist, amount_total: booking.amount_total });
+  // The view exposes refunds separately, so "held" is deposit minus refunds.
+  const depositRefunded = ledger.reduce((sum, entry) => sum + (entry.kind === "refund" ? entry.amount : 0), 0);
   const activeLink = data.shareLinks.find((link) => isShareLinkUsable(link));
   const shareUrl = activeLink ? `${site.siteUrl.replace(/\/$/, "")}/r/${activeLink.token}` : null;
   const carLabel = site.fleet.find((car) => car.slug === booking.car_slug)?.name || booking.car_slug;
@@ -99,15 +107,28 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
             amount_total: Number(booking.amount_total), deposit: Number(booking.deposit),
             deposit_returned: booking.deposit_returned,
           }}
-          phone={customer?.phone || ""}
-          context={messageContext}
+        />
+        <PaymentLedgerPanel
+          bookingId={booking.id}
+          payments={ledger}
+          total={payments.total}
+          collected={payments.collected}
+          balance={payments.balance}
+          deposit={payments.deposit - depositRefunded}
         />
         <section className="admin-form-card"><div className="admin-card-head"><div><h2>Assigned vehicle</h2><span className="admin-card-subtitle">Availability is checked again when saving.</span></div></div><p className="admin-assigned-vehicle">{vehicleLabel || "No physical vehicle assigned"}</p><BookingVehicleAssignment bookingId={booking.id} categorySlug={booking.car_slug} startAt={booking.start_at} endAt={booking.end_at} vehicleId={booking.vehicle_id} /></section>
         <ShareLinkPanel bookingId={booking.id} siteUrl={site.siteUrl.replace(/\/$/, "")} activeLink={activeLink} />
       </div>
     </div>
 
-    <section className="admin-card admin-booking-section"><div className="admin-card-head"><div><h2>Customer messages</h2><span className="admin-card-subtitle">Ad-hoc messages. Lifecycle updates prompt their own message above.</span></div></div><MessageTemplates phone={customer?.phone || ""} context={messageContext} /></section>
+    <section className="admin-card admin-booking-section">
+      <div className="admin-card-head"><div><h2>Customer messages</h2><span className="admin-card-subtitle">Created automatically as the booking moves. Every send or skip is recorded.</span></div></div>
+      <BookingMessageLog messages={messages} />
+      <details className="admin-adhoc-templates">
+        <summary>Send something else</summary>
+        <MessageTemplates phone={customer?.phone || ""} context={messageContext} />
+      </details>
+    </section>
 
     <BookingMediaPanel bookingId={booking.id} media={data.media} />
 
