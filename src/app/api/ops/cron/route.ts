@@ -1,4 +1,5 @@
-import { OpsAuthError, verifyCronSecret } from "@/lib/ops/auth";
+import { verifyCronSecret } from "@/lib/ops/auth";
+import { AdminAuthError } from "@/lib/admin/auth";
 import { getSupabaseAdmin } from "@/lib/supabase-server";
 import { isMissingSchema } from "@/lib/admin/schema";
 import { notifyAdmins } from "@/lib/push/notify";
@@ -35,7 +36,7 @@ export async function POST(request: Request) {
   try {
     verifyCronSecret(request);
   } catch (error) {
-    const status = error instanceof OpsAuthError ? error.status : 500;
+    const status = error instanceof AdminAuthError ? error.status : 500;
     return Response.json({ error: "Unauthorised" }, { status });
   }
 

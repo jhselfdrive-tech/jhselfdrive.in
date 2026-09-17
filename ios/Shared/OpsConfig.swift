@@ -12,15 +12,17 @@ enum OpsConfig {
             .trimmingCharacters(in: .whitespaces)
     }
 
-    /// The config stores bare hostnames and the scheme is added here, because
-    /// "//" starts a comment in an xcconfig file and silently truncates a
-    /// pasted URL.
-    private static func https(_ host: String) -> URL? {
+    /// The config stores a bare host (optionally with a port) and the scheme
+    /// separately, because "//" starts a comment in an xcconfig file and
+    /// silently truncates a pasted URL.
+    private static func url(host: String, scheme: String) -> URL? {
         guard !host.isEmpty else { return nil }
-        return URL(string: "https://\(host)")
+        return URL(string: "\(scheme.isEmpty ? "https" : scheme)://\(host)")
     }
 
-    static var apiBaseURL: URL? { https(string("OPS_API_HOST")) }
-    static var supabaseURL: URL? { https(string("SUPABASE_HOST")) }
+    /// Set OPS_API_SCHEME to http and OPS_API_HOST to <mac-ip>:3000 to test
+    /// against `npm run dev` without deploying.
+    static var apiBaseURL: URL? { url(host: string("OPS_API_HOST"), scheme: string("OPS_API_SCHEME")) }
+    static var supabaseURL: URL? { url(host: string("SUPABASE_HOST"), scheme: "https") }
     static var supabaseKey: String { string("SUPABASE_PUBLISHABLE_KEY") }
 }

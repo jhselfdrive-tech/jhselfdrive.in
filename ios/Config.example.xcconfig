@@ -12,7 +12,11 @@
 // set it HERE rather than in the Xcode UI, which only applies it to one target
 // and leaves the widget and notification extension unsigned.
 
-OPS_API_HOST = jhselfdrive.in
+OPS_API_HOST = www.jhselfdrive.in
+
+// Leave as https for the deployed site. For local testing against
+// `npm run dev`, set scheme to http and host to <your-mac-ip>:3000.
+OPS_API_SCHEME = https
 SUPABASE_HOST = YOUR-PROJECT.supabase.co
 SUPABASE_PUBLISHABLE_KEY = sb_publishable_xxxxxxxxxxxxxxxxxxxx
 DEVELOPMENT_TEAM =

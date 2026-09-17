@@ -78,15 +78,21 @@ struct OpsAPI: Sendable {
 
     // MARK: - Ops routes
 
+    /// Query items are passed separately, never inline in `path`:
+    /// `appending(path:)` percent-encodes "?" to "%3F", which silently turns
+    /// the query into part of the path and 404s.
     private func send<T: Decodable>(
         _ path: String,
+        query: [URLQueryItem] = [],
         method: String = "GET",
         body: (any Encodable)? = nil,
         as _: T.Type,
         retryOn401: Bool = true
     ) async throws -> T {
         guard let base = OpsConfig.apiBaseURL else { throw OpsError(message: "API URL is not configured") }
-        var request = URLRequest(url: base.appending(path: path))
+        var url = base.appending(path: path)
+        if !query.isEmpty { url = url.appending(queryItems: query) }
+        var request = URLRequest(url: url)
         request.httpMethod = method
         request.setValue("Bearer \(try await authorised())", forHTTPHeaderField: "Authorization")
         if let body {
@@ -100,7 +106,7 @@ struct OpsAPI: Sendable {
         // One retry covers a token that expired between the check and the call.
         if status == 401, retryOn401, let session = TokenStore.load() {
             _ = try await refresh(session)
-            return try await send(path, method: method, body: body, as: T.self, retryOn401: false)
+            return try await send(path, query: query, method: method, body: body, as: T.self, retryOn401: false)
         }
         guard (200..<300).contains(status) else {
             let message = (try? JSONDecoder.ops.decode(ErrorBody.self, from: data))?.error
@@ -115,7 +121,11 @@ struct OpsAPI: Sendable {
 
     func requests(status: String = "requested") async throws -> [BookingRow] {
         struct Wrapper: Decodable { let bookings: [BookingRow] }
-        return try await send("api/ops/requests?status=\(status)", as: Wrapper.self).bookings
+        return try await send(
+            "api/ops/requests",
+            query: [URLQueryItem(name: "status", value: status)],
+            as: Wrapper.self
+        ).bookings
     }
 
     func booking(id: String) async throws -> BookingDetail {
