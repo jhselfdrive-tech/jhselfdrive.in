@@ -499,3 +499,28 @@
 @media (max-width: 760px) {
   .admin-payment-summary { grid-template-columns: 1fr 1fr; }
 }
+
+/* ---------- Tabbed detail sections ---------- */
+.admin-tabs { margin-top: 4px; }
+.admin-tablist { display: flex; gap: 4px; margin-bottom: 18px; padding: 5px; overflow-x: auto; background: #eef2f0; border-radius: 13px; scrollbar-width: none; }
+.admin-tablist::-webkit-scrollbar { display: none; }
+.admin-tab {
+  display: inline-flex; align-items: center; gap: 7px; flex: 1 0 auto; min-height: 38px; padding: 0 15px;
+  background: transparent; border: 0; border-radius: 10px; color: var(--muted);
+  font: inherit; font-size: .74rem; font-weight: 800; white-space: nowrap; cursor: pointer; transition: .18s ease;
+}
+.admin-tab:hover { color: var(--teal); }
+.admin-tab.active { background: var(--white); color: var(--ink); box-shadow: 0 2px 8px rgba(20,45,41,.08); }
+.admin-tab-badge {
+  display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px;
+  background: #fde68a; border-radius: 999px; color: #92400e; font-size: .6rem; font-style: normal; font-weight: 800;
+}
+.admin-tab.active .admin-tab-badge { background: var(--coral); color: white; }
+.admin-tab-panel[hidden] { display: none; }
+.admin-tab-panel > .admin-card:first-child,
+.admin-tab-panel > .admin-form-card:first-child { margin-top: 0; }
+
+@media (max-width: 560px) {
+  .admin-tab { flex: 0 0 auto; padding: 0 12px; }
+  .admin-tab > span { font-size: .7rem; }
+}

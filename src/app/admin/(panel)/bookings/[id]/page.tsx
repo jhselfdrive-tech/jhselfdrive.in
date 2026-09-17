@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AlertTriangle, CalendarClock, CircleDollarSign, IndianRupee, Route, ShieldCheck, UserRound } from "lucide-react";
+import { AlertTriangle, CalendarClock, CircleDollarSign, ClipboardCheck, History, IndianRupee, MessageCircle, Route, ShieldCheck, UserRound } from "lucide-react";
 import { BookingMediaPanel } from "@/components/admin/BookingMediaPanel";
 import { BookingMessageLog } from "@/components/admin/BookingMessageLog";
 import { BookingTransitions } from "@/components/admin/BookingTransitions";
 import { PaymentLedgerPanel } from "@/components/admin/PaymentLedgerPanel";
+import { Tabs } from "@/components/admin/Tabs";
 import { BookingVehicleAssignment } from "@/components/admin/BookingVehicleAssignment";
 import { HandoverForm } from "@/components/admin/HandoverForm";
 import { MessageTemplates } from "@/components/admin/MessageTemplates";
@@ -43,6 +44,9 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
   const payments = paymentSummary({ ...data.checklist, amount_total: booking.amount_total });
   // The view exposes refunds separately, so "held" is deposit minus refunds.
   const depositRefunded = ledger.reduce((sum, entry) => sum + (entry.kind === "refund" ? entry.amount : 0), 0);
+  // Anything unsent opens the Messages tab first, so a pending notification is
+  // never hidden behind a tab the operator has no reason to click.
+  const dueMessages = messages.filter((message) => message.status === "due").length;
   const activeLink = data.shareLinks.find((link) => isShareLinkUsable(link));
   const shareUrl = activeLink ? `${site.siteUrl.replace(/\/$/, "")}/r/${activeLink.token}` : null;
   const carLabel = site.fleet.find((car) => car.slug === booking.car_slug)?.name || booking.car_slug;
@@ -94,44 +98,76 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
 
     {gaps.length ? <div className="admin-notice admin-checklist-notice"><AlertTriangle size={18} /><div><strong>Checklist is informational and still has {gaps.length} gap{gaps.length === 1 ? "" : "s"}</strong><p>{gaps.join(" · ")}. Status changes remain available.</p></div></div> : null}
 
-    <div className="admin-detail-columns admin-booking-columns">
-      <div className="admin-detail-stack">
-        <HandoverForm bookingId={booking.id} phase="delivery" handover={delivery} previousOdometer={vehicle?.odometer_km} />
-        <details className="admin-return-details" open={Boolean(returned)}><summary><CalendarClock size={16} /> Return checklist</summary><HandoverForm bookingId={booking.id} phase="return" handover={returned} previousOdometer={delivery?.odometer_km ?? vehicle?.odometer_km} /></details>
-      </div>
-      <div className="admin-detail-stack">
-        <BookingTransitions
-          booking={{
-            id: booking.id, status: booking.status as BookingStatus, car_slug: booking.car_slug,
-            start_at: booking.start_at, end_at: booking.end_at, vehicle_id: booking.vehicle_id,
-            amount_total: Number(booking.amount_total), deposit: Number(booking.deposit),
-            deposit_returned: booking.deposit_returned,
-          }}
-        />
-        <PaymentLedgerPanel
-          bookingId={booking.id}
-          payments={ledger}
-          total={payments.total}
-          collected={payments.collected}
-          balance={payments.balance}
-          deposit={payments.deposit - depositRefunded}
-        />
-        <section className="admin-form-card"><div className="admin-card-head"><div><h2>Assigned vehicle</h2><span className="admin-card-subtitle">Availability is checked again when saving.</span></div></div><p className="admin-assigned-vehicle">{vehicleLabel || "No physical vehicle assigned"}</p><BookingVehicleAssignment bookingId={booking.id} categorySlug={booking.car_slug} startAt={booking.start_at} endAt={booking.end_at} vehicleId={booking.vehicle_id} /></section>
-        <ShareLinkPanel bookingId={booking.id} siteUrl={site.siteUrl.replace(/\/$/, "")} activeLink={activeLink} />
-      </div>
-    </div>
+    {/* Pinned above the tabs: the operator's next action should never be a
+        click away, however deep the rest of the record gets. */}
+    <BookingTransitions
+      booking={{
+        id: booking.id, status: booking.status as BookingStatus, car_slug: booking.car_slug,
+        start_at: booking.start_at, end_at: booking.end_at, vehicle_id: booking.vehicle_id,
+        amount_total: Number(booking.amount_total), deposit: Number(booking.deposit),
+        deposit_returned: booking.deposit_returned,
+      }}
+    />
 
-    <section className="admin-card admin-booking-section">
-      <div className="admin-card-head"><div><h2>Customer messages</h2><span className="admin-card-subtitle">Created automatically as the booking moves. Every send or skip is recorded.</span></div></div>
-      <BookingMessageLog messages={messages} />
-      <details className="admin-adhoc-templates">
-        <summary>Send something else</summary>
-        <MessageTemplates phone={customer?.phone || ""} context={messageContext} />
-      </details>
-    </section>
-
-    <BookingMediaPanel bookingId={booking.id} media={data.media} />
-
-    <section className="admin-card admin-booking-section"><div className="admin-card-head"><div><h2>Booking timeline</h2><span className="admin-card-subtitle">A compact operational history</span></div></div><div className="admin-booking-timeline">{timeline.map((event) => <div key={event.key}><span /><section><strong>{event.title}</strong><small>{event.detail}</small></section></div>)}</div></section>
+    <Tabs
+      initialTab={dueMessages ? "messages" : "handover"}
+      tabs={[
+        {
+          id: "handover",
+          label: "Handover",
+          icon: <ClipboardCheck size={14} />,
+          badge: gaps.length || undefined,
+          content: <>
+            <div className="admin-detail-columns admin-booking-columns">
+              <div className="admin-detail-stack">
+                <HandoverForm bookingId={booking.id} phase="delivery" handover={delivery} previousOdometer={vehicle?.odometer_km} />
+                <details className="admin-return-details" open={Boolean(returned)}><summary><CalendarClock size={16} /> Return checklist</summary><HandoverForm bookingId={booking.id} phase="return" handover={returned} previousOdometer={delivery?.odometer_km ?? vehicle?.odometer_km} /></details>
+              </div>
+              <div className="admin-detail-stack">
+                <section className="admin-form-card"><div className="admin-card-head"><div><h2>Assigned vehicle</h2><span className="admin-card-subtitle">Availability is checked again when saving.</span></div></div><p className="admin-assigned-vehicle">{vehicleLabel || "No physical vehicle assigned"}</p><BookingVehicleAssignment bookingId={booking.id} categorySlug={booking.car_slug} startAt={booking.start_at} endAt={booking.end_at} vehicleId={booking.vehicle_id} /></section>
+                <ShareLinkPanel bookingId={booking.id} siteUrl={site.siteUrl.replace(/\/$/, "")} activeLink={activeLink} />
+              </div>
+            </div>
+            <BookingMediaPanel bookingId={booking.id} media={data.media} />
+          </>,
+        },
+        {
+          id: "payments",
+          label: "Payments",
+          icon: <IndianRupee size={14} />,
+          content: <PaymentLedgerPanel
+            bookingId={booking.id}
+            payments={ledger}
+            total={payments.total}
+            collected={payments.collected}
+            balance={payments.balance}
+            deposit={payments.deposit - depositRefunded}
+          />,
+        },
+        {
+          id: "messages",
+          label: "Messages",
+          icon: <MessageCircle size={14} />,
+          badge: dueMessages || undefined,
+          content: <section className="admin-card admin-booking-section">
+            <div className="admin-card-head"><div><h2>Customer messages</h2><span className="admin-card-subtitle">Created automatically as the booking moves. Every send or skip is recorded.</span></div></div>
+            <BookingMessageLog messages={messages} />
+            <details className="admin-adhoc-templates">
+              <summary>Send something else</summary>
+              <MessageTemplates phone={customer?.phone || ""} context={messageContext} />
+            </details>
+          </section>,
+        },
+        {
+          id: "activity",
+          label: "Activity",
+          icon: <History size={14} />,
+          content: <section className="admin-card admin-booking-section">
+            <div className="admin-card-head"><div><h2>Booking timeline</h2><span className="admin-card-subtitle">A compact operational history</span></div></div>
+            <div className="admin-booking-timeline">{timeline.map((event) => <div key={event.key}><span /><section><strong>{event.title}</strong><small>{event.detail}</small></section></div>)}</div>
+          </section>,
+        },
+      ]}
+    />
   </>;
 }
