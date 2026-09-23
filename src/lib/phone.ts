@@ -1,6 +1,8 @@
 /** Store one international identity; bare Indian mobiles remain convenient. */
 export function normalizePhone(input: string): string | null {
-  const value = input.trim();
+  // Contact/WhatsApp copies may wrap numbers in invisible direction marks.
+  // Normalize presentation characters without changing the phone's digits.
+  const value = input.normalize("NFKC").replace(/\p{Cf}/gu, "").replace(/\p{Pd}/gu, "-").trim();
   // Permit formatting, but never silently discard letters or extensions.
   if (!/^[+\d\s().-]+$/.test(value)) return null;
   let compact = value.replace(/[\s().-]/g, "");

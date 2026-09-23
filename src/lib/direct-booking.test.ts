@@ -36,6 +36,7 @@ describe("directBookingSchema validation", () => {
 
   it("accepts international mobiles with a country code", () => {
     expect(directBookingSchema.parse({ ...validPayload, phone: "+44 7700 900123" }).phone).toBe("+447700900123");
+    expect(directBookingSchema.parse({ ...validPayload, phone: "\u202a+971 50 180 1938\u202c" }).phone).toBe("+971501801938");
   });
 
   it("rejects invalid mobile numbers", () => {
