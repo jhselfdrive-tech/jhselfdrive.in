@@ -1,0 +1,14 @@
+#include "Config.xcconfig"
+// Must match AppDelegate.swift #if DEBUG device registration.
+APS_ENVIRONMENT = production
+
+OPS_API_HOST = www.jhselfdrive.in
+
+// Leave as https for the deployed site. For local testing against
+// `npm run dev`, set scheme to http and host to <your-mac-ip>:3000.
+OPS_API_SCHEME = https
+SUPABASE_HOST = xqsaaqzooxmsikqgpfgb.supabase.co
+SUPABASE_PUBLISHABLE_KEY = sb_publishable_lbdd480CefR8bu4GDAzEcQ_hqKlWqKO
+// DEVELOPMENT_TEAM is inherited from Config.xcconfig.
+
+MARKETING_VERSION = 1.1

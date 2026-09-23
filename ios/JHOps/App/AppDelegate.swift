@@ -31,6 +31,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     ) {
         let token = deviceToken.map { String(format: "%02x", $0) }.joined()
         Self.currentDeviceToken = token
+        // Keep this branch aligned with APS_ENVIRONMENT in Config.debug/release.xcconfig.
         // A debug build talks to APNs sandbox; a TestFlight/App Store build to
         // production. The server must target the matching host or Apple
         // rejects the token as BadDeviceToken.
@@ -69,8 +70,8 @@ extension AppDelegate: @preconcurrency UNUserNotificationCenterDelegate {
     ) {
         let info = response.notification.request.content.userInfo
         if let bookingId = info["bookingId"] as? String {
-            NotificationCenter.default.post(name: .openBooking, object: nil, userInfo: ["bookingId": bookingId])
             Self.launchBookingId = bookingId
+            NotificationCenter.default.post(name: .openBooking, object: nil, userInfo: ["bookingId": bookingId])
         }
         WidgetCenter.shared.reloadAllTimelines()
         completionHandler()

@@ -2,6 +2,7 @@ import Foundation
 
 struct OpsError: LocalizedError {
     let message: String
+    var status: Int? = nil
     var errorDescription: String? { message }
 }
 
@@ -22,7 +23,7 @@ struct OpsAPI: Sendable {
     // MARK: - Supabase auth
 
     func signIn(email: String, password: String) async throws -> TokenStore.Session {
-        guard let base = OpsConfig.supabaseURL else { throw OpsError(message: "Supabase URL is not configured") }
+        guard let base = OpsConfig.supabaseURL else { throw OpsError(message: "Supabase hostname is invalid. Use the bare hostname in Config.xcconfig, without https://.") }
         var request = URLRequest(url: base.appending(path: "auth/v1/token").appending(queryItems: [
             URLQueryItem(name: "grant_type", value: "password"),
         ]))
@@ -44,7 +45,7 @@ struct OpsAPI: Sendable {
     }
 
     private func refresh(_ session: TokenStore.Session) async throws -> TokenStore.Session {
-        guard let base = OpsConfig.supabaseURL else { throw OpsError(message: "Supabase URL is not configured") }
+        guard let base = OpsConfig.supabaseURL else { throw OpsError(message: "Supabase hostname is invalid. Use the bare hostname in Config.xcconfig, without https://.") }
         var request = URLRequest(url: base.appending(path: "auth/v1/token").appending(queryItems: [
             URLQueryItem(name: "grant_type", value: "refresh_token"),
         ]))
@@ -57,6 +58,7 @@ struct OpsAPI: Sendable {
         guard (response as? HTTPURLResponse)?.statusCode == 200 else {
             // The refresh token is spent; the caller must sign in again.
             TokenStore.clear()
+            NotificationCenter.default.post(name: Notification.Name("in.jhselfdrive.ops.authExpired"), object: nil)
             throw OpsError(message: "Session expired. Please sign in again.")
         }
         let token = try JSONDecoder.ops.decode(TokenResponse.self, from: data)
@@ -70,7 +72,7 @@ struct OpsAPI: Sendable {
     }
 
     /// A valid access token, refreshing first if the stored one is near expiry.
-    private func authorised() async throws -> String {
+    func authorised() async throws -> String {
         guard let session = TokenStore.load() else { throw OpsError(message: "Not signed in") }
         if session.isFresh { return session.accessToken }
         return try await refresh(session).accessToken
@@ -81,15 +83,17 @@ struct OpsAPI: Sendable {
     /// Query items are passed separately, never inline in `path`:
     /// `appending(path:)` percent-encodes "?" to "%3F", which silently turns
     /// the query into part of the path and 404s.
-    private func send<T: Decodable>(
+    func send<T: Decodable>(
         _ path: String,
         query: [URLQueryItem] = [],
         method: String = "GET",
         body: (any Encodable)? = nil,
+        rawBody: Data? = nil,
+        contentType: String? = nil,
         as _: T.Type,
         retryOn401: Bool = true
     ) async throws -> T {
-        guard let base = OpsConfig.apiBaseURL else { throw OpsError(message: "API URL is not configured") }
+        guard let base = OpsConfig.apiBaseURL else { throw OpsError(message: "API hostname is invalid. Check OPS_API_HOST in Config.xcconfig.") }
         var url = base.appending(path: path)
         if !query.isEmpty { url = url.appending(queryItems: query) }
         var request = URLRequest(url: url)
@@ -100,17 +104,23 @@ struct OpsAPI: Sendable {
             request.httpBody = try JSONEncoder().encode(AnyEncodable(body))
         }
 
+        if let rawBody { request.httpBody = rawBody; request.setValue(contentType, forHTTPHeaderField: "Content-Type") }
+        request.cachePolicy = .reloadIgnoringLocalCacheData
         let (data, response) = try await URLSession.shared.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
 
         // One retry covers a token that expired between the check and the call.
         if status == 401, retryOn401, let session = TokenStore.load() {
             _ = try await refresh(session)
-            return try await send(path, query: query, method: method, body: body, as: T.self, retryOn401: false)
+            return try await send(path, query: query, method: method, body: body, rawBody: rawBody, contentType: contentType, as: T.self, retryOn401: false)
         }
         guard (200..<300).contains(status) else {
             let message = (try? JSONDecoder.ops.decode(ErrorBody.self, from: data))?.error
-            throw OpsError(message: message ?? "Request failed (\(status))")
+            if status == 401 || status == 403 {
+                TokenStore.clear()
+                NotificationCenter.default.post(name: Notification.Name("in.jhselfdrive.ops.authExpired"), object: nil)
+            }
+            throw OpsError(message: message ?? "Request failed (\(status))", status: status)
         }
         return try JSONDecoder.ops.decode(T.self, from: data)
     }
@@ -119,45 +129,7 @@ struct OpsAPI: Sendable {
         try await send("api/ops/summary", as: OpsSummary.self)
     }
 
-    func requests(status: String = "requested") async throws -> [BookingRow] {
-        struct Wrapper: Decodable { let bookings: [BookingRow] }
-        return try await send(
-            "api/ops/requests",
-            query: [URLQueryItem(name: "status", value: status)],
-            as: Wrapper.self
-        ).bookings
-    }
 
-    func booking(id: String) async throws -> BookingDetail {
-        try await send("api/ops/bookings/\(id)", as: BookingDetail.self)
-    }
-
-    func transition(id: String, to status: String, note: String = "", vehicleId: String = "") async throws -> TransitionResult {
-        struct Body: Encodable { let status: String; let note: String; let vehicleId: String }
-        return try await send(
-            "api/ops/bookings/\(id)/transition",
-            method: "POST",
-            body: Body(status: status, note: note, vehicleId: vehicleId),
-            as: TransitionResult.self
-        )
-    }
-
-    func registerDevice(token: String, environment: String, appVersion: String) async throws {
-        struct Body: Encodable { let apnsToken: String; let environment: String; let appVersion: String }
-        struct Ack: Decodable { let ok: Bool }
-        _ = try await send(
-            "api/ops/devices",
-            method: "POST",
-            body: Body(apnsToken: token, environment: environment, appVersion: appVersion),
-            as: Ack.self
-        )
-    }
-
-    func unregisterDevice(token: String) async throws {
-        struct Body: Encodable { let apnsToken: String }
-        struct Ack: Decodable { let ok: Bool }
-        _ = try await send("api/ops/devices", method: "DELETE", body: Body(apnsToken: token), as: Ack.self)
-    }
 }
 
 /// Lets `send` take a heterogeneous body without making the whole call generic
@@ -166,4 +138,27 @@ private struct AnyEncodable: Encodable {
     private let encode: (Encoder) throws -> Void
     init(_ wrapped: any Encodable) { encode = wrapped.encode }
     func encode(to encoder: Encoder) throws { try encode(encoder) }
+}
+
+extension JSONDecoder {
+    /// The API sends ISO-8601 timestamps from Postgres, which sometimes carry
+    /// fractional seconds and sometimes do not, so both are accepted.
+    ///
+    /// Uses Date.ISO8601FormatStyle rather than ISO8601DateFormatter because the
+    /// latter is not Sendable and cannot be captured by the @Sendable decoding
+    /// closure under Swift 6.
+    static let ops: JSONDecoder = {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { inner in
+            let text = try inner.singleValueContainer().decode(String.self)
+            let withFraction = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
+            let plain = Date.ISO8601FormatStyle(includingFractionalSeconds: false)
+            if let date = try? withFraction.parse(text) { return date }
+            if let date = try? plain.parse(text) { return date }
+            throw DecodingError.dataCorrupted(
+                .init(codingPath: inner.codingPath, debugDescription: "Unrecognised date: \(text)")
+            )
+        }
+        return decoder
+    }()
 }

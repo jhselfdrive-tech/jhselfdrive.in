@@ -5,7 +5,8 @@
   <key>com.apple.security.application-groups</key>
   <array><string>group.in.jhselfdrive.ops</string></array>
   <key>aps-environment</key>
-  <string>development</string>
+  <!-- Configuration must match AppDelegate #if DEBUG registration. -->
+  <string>$(APS_ENVIRONMENT)</string>
   <key>keychain-access-groups</key>
   <!-- Team-prefixed so it matches the profile's <TeamID>.* wildcard; a bare
        app-group name is rejected at codesign with "doesn't match the

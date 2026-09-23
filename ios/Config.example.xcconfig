@@ -30,3 +30,5 @@ OPS_API_SCHEME = https
 SUPABASE_HOST = YOUR-PROJECT.supabase.co
 SUPABASE_PUBLISHABLE_KEY = sb_publishable_xxxxxxxxxxxxxxxxxxxx
 DEVELOPMENT_TEAM =
+
+MARKETING_VERSION = 1.1

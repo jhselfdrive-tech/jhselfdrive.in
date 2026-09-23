@@ -1,13 +1,14 @@
 # JH Ops — iOS app and home-screen widget
 
-Booking requests pushed to your phone, with a widget showing what needs
-attention. Talks to the `/api/ops` routes in the Next.js app.
+Five native tabs for Today, Bookings, Calendar, Fleet and Customers, plus
+a home-screen widget and push deep links. All operations use the authenticated
+`/api/ops` JSON API; the app never reads PostgREST directly.
 
 ```
-JHOps/        SwiftUI app — login, request list, booking detail, transitions
+JHOps/        App/, API/, Models/, DesignSystem/, Features/, Resources/
 JHOpsWidget/  WidgetKit extension — the home-screen tile
 JHOpsNotify/  Notification service extension — refreshes the widget on push
-Shared/       Config, API client, models, App Group store, Keychain
+Shared/       Config, stateless HTTP/auth, summary, App Group store, Keychain
 ```
 
 ## Two build tiers
@@ -21,7 +22,7 @@ a provisioning profile at all.
 |---|---|---|
 | Spec | `xcodegen --spec project-free.yml` | `xcodegen` |
 | App on home screen | yes | yes |
-| Requests, approve/decline, WhatsApp | yes | yes |
+| Bookings, money, handovers, fleet, calendar, customers | yes | yes |
 | Push notifications | **no** | yes |
 | Home-screen widget | **no** | yes |
 | Profile lifetime | 7 days, re-sign weekly | 1 year |
@@ -56,12 +57,14 @@ Set these in Vercel (and `.env` locally). See `.env.example`.
 | `APNS_KEY_ID` | the 10-character Key ID |
 | `APNS_TEAM_ID` | your 10-character Team ID |
 | `APNS_BUNDLE_ID` | `in.jhselfdrive.ops` |
-| `APNS_ENVIRONMENT` | `sandbox` for Xcode builds, `production` for TestFlight |
+| `APNS_ENVIRONMENT` | `production` as the fallback default |
 | `OPS_CRON_SECRET` | `openssl rand -hex 32` |
 
-`APNS_ENVIRONMENT` must match how the app was built. A debug build from Xcode
-gets a **sandbox** token; sending it to the production host fails with
-`BadDeviceToken`, which is the single most common cause of "push does nothing".
+Every device registers its own environment: Debug uses sandbox and Release
+uses production. `notifyAdmins` groups devices by that value and selects the
+matching APNs host. Both can coexist; `APNS_ENVIRONMENT` is only a fallback.
+Set the Vercel default to `production`. Replacing a debug installation with
+TestFlight eventually produces a 410 for the old token, which is pruned.
 
 ## Build
 
@@ -121,6 +124,7 @@ Long-press the home screen → **Edit** → **Add Widget** → JH Ops.
 
 ```sh
 ./verify.sh free    # or: ./verify.sh full
+./test-models.sh    # decoding, multipart, downscaling, GPS stripping
 ```
 
 Builds and then asserts the produced bundle is actually installable.
@@ -149,3 +153,138 @@ than hand-written: the required bundle keys are then always present. Do not add
   so polling cannot keep the widget current. Each push carries the new counts
   and `JHOpsNotify` writes them to the App Group store and reloads the
   timeline — that is what makes the widget update the instant a request lands.
+
+
+## Publishing to TestFlight
+
+The full paid spec uses team `NQW9XD522R`. Complete these account steps once:
+
+1. In App Store Connect, create an iOS app with bundle ID `in.jhselfdrive.ops`,
+   SKU `jh-ops-ios`, and English (India). Try the listing name “JH Ops”; use
+   “JH Self Drive Ops” if unavailable. The installed display name stays JH Ops.
+2. Verify Push Notifications + App Groups on the app ID, and App Groups on
+   `.widget` and `.notify`, all using `group.in.jhselfdrive.ops`.
+3. Users and Access → Integrations → App Store Connect API: create an App
+   Manager API key. Save the once-downloadable key at
+   `~/.appstoreconnect/private_keys/AuthKey_<KEYID>.p8`. An APNs key is a
+   different credential and cannot upload builds. Keep private keys out of git.
+4. Fill App Privacy to match `Resources/PrivacyInfo.xcprivacy`: no tracking;
+   email, phone, name, and photos used for app functionality and linked to the
+   person. UserDefaults reasons CA92.1 and 1C8F.1 cover the app-group suite and
+   the standard-defaults fallback. Keychain needs no required-reason declaration.
+5. Configure Test Information and a support contact. For external review,
+   provide a real, dedicated login on the `admin_users` allowlist. A Supabase
+   account alone cannot enter the app.
+
+From `ios/`, after committing the release sources:
+
+```sh
+export ASC_KEY_ID=YOUR_KEY_ID
+export ASC_ISSUER_ID=YOUR_ISSUER_ID
+# Optional: ASC_KEY_PATH=/absolute/path/to/AuthKey_YOUR_KEY_ID.p8
+./release.sh
+```
+
+The script generates the full project, gates on a Release verification build,
+archives with automatic provisioning and the API key, verifies the signed
+archive, then exports with `destination: upload`. The account must have rights
+to create the Apple Distribution certificate and three App Store profiles.
+Confirm the resulting certificate with `security find-identity -v -p codesigning`.
+No fastlane or separate `altool` is required; if export upload is unavailable,
+Xcode Organizer or `xcrun altool --upload-app --type ios --file <ipa> --apiKey
+<key-id> --apiIssuer <issuer-id>` is a fallback, not the normal path.
+
+`MARKETING_VERSION` lives in the ignored `Config.xcconfig` (example: `1.1`).
+Increment it for a feature release. `CURRENT_PROJECT_VERSION` defaults to the
+commit count, passed on the command line. Release from a linear mainline so the
+count never goes backwards; an explicit higher `BUILD` is available when the
+account has already used a number. Never reuse an uploaded version/build pair.
+All three generated plists map both version build settings explicitly. App and
+extension mismatch causes ITMS-90473; `verify-bundle.sh` fails before upload.
+
+`Config.debug.xcconfig` includes the local config and selects
+`APS_ENVIRONMENT=development`; `Config.release.xcconfig` selects `production`.
+Do not edit the entitlements to switch environments. This setting must remain
+aligned with App/AppDelegate's `#if DEBUG` registration branch. An unsigned compile
+cannot prove the signed entitlement; release.sh checks it on the archive with
+`codesign`. Exempt encryption is declared in all three generated plists.
+
+Regenerate the icon from the repository root with
+`node scripts/generate-app-icon.mjs`. The icon is a single 1024×1024, sRGB,
+opaque PNG, without rounded corners. Verify with:
+
+```sh
+sips -g hasAlpha JHOps/Resources/Assets.xcassets/AppIcon.appiconset/icon-1024.png
+# must report: hasAlpha: no
+```
+
+After processing, add the build to an internal testing group. Internal testing
+supports up to 100 App Store Connect users and does not require Beta App Review.
+For the first friend, add an ASC user with Developer access and add them to that
+group; they also need their own Supabase login on `admin_users`. External email
+or public-link testing supports up to 10,000 people but requires Beta App Review
+for the first build of each version. Allow review time and provide the demo login.
+
+## Server rollout and contract checks
+
+Apply `supabase/migrations/0009_admin_bookings.sql` to the correct site project
+before deploying the server and distributing this app. It introduces an atomic
+customer-upsert + booking-insert RPC with a vehicle row lock. Admin availability
+now includes maintenance vehicles; public availability still requires an active,
+bookable vehicle. Completed rentals continue to reserve their historical dates.
+Existing `/api/ops/requests` and the original booking-detail keys remain intact.
+
+From the repository root:
+
+```sh
+npm run test && npm run lint && npm run build
+./scripts/test-admin-bookings.sh # local, disposable PostgreSQL 17; PG_BIN overrides its path
+npm run dev
+# In another terminal:
+./scripts/ops-smoke.sh
+```
+
+The smoke script discovers every ops route/method and checks 401 without a
+header and with a garbage token. Set `OPS_SMOKE_ADMIN_EMAIL`,
+`OPS_SMOKE_ADMIN_PASSWORD`, `OPS_SMOKE_NONADMIN_EMAIL`, and
+`OPS_SMOKE_NONADMIN_PASSWORD` to add password-grant 403 tests, authenticated
+reads, and malformed-body tests. Existing bearer tokens can instead be passed
+in `OPS_SMOKE_ADMIN_TOKEN` and `OPS_SMOKE_NONADMIN_TOKEN`. Tokens are never logged.
+`OPS_SMOKE_URL` defaults to localhost; set it explicitly for staging.
+
+Mutating tests require `OPS_SMOKE_MUTATIONS=1` and `OPS_SMOKE_FIXTURES`, a JSON
+file of disposable fixture requests: `{ "method": "POST", "path":
+"/api/ops/…", "body": {…}, "expected": [200] }`. Include conflict cases with
+expected `[409]`. Do not use operational bookings as disposable fixtures.
+The unit suite additionally verifies media compensation on occupied licence
+slots, HEIC rejection, error redaction, admin gating, and calendar packing.
+
+Photos are JPEG-encoded at 1600px, quality 0.7, retried at 0.5 above 1.5 MB,
+and rejected above 3.5 MB. One file is posted at a time, and failed data stays
+in the sheet for Retry. Vehicle documents are capped at 4 MB; use the web panel
+for larger files. The server derives restricted/public buckets from media type.
+
+Only Today counts, booking lists, fleet lists, customers, and meta are cached
+as protected files in the App Group. Detail and calendar always load live.
+Writes are never queued offline. Successful mutations refresh sibling tabs and
+invalidate the web panel. `/api/ops/meta` provides option labels and
+`OPS_MIN_APP_BUILD` lets the server require a newer installed build.
+
+## Device acceptance before inviting testers
+
+- Simulator: point `OPS_API_SCHEME=http` and `OPS_API_HOST=<mac-ip>:3000` at the
+  new server. Check every tab, empty/error states, dark mode, and largest text.
+- Debug device: check camera → JPEG → upload, one repeated licence-slot 409,
+  payments, handovers, and the corresponding web-panel state after each mutation.
+- Verify the widget populates after login and that notification taps from cold
+  start and background select a single booking detail instead of stacking copies.
+- Clean TestFlight install: sign in, receive a production push, open its booking,
+  sign out, and confirm the device is removed from `admin_devices`. Repeat with
+  the friend’s account and one approval.
+
+A passing unsigned build is not a TestFlight upload or a physical-device push test.
+
+For real media checks, also set `OPS_SMOKE_MEDIA_BOOKING_ID` to a disposable
+booking with an empty delivery licence-front slot. The smoke script tests HEIC
+400, 5 MB 413, duplicate slot 409, compares restricted bucket contents to detect
+orphan uploads, and deletes its own successful upload in `finally`.
