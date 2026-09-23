@@ -2,6 +2,7 @@ import "server-only";
 import { getSupabaseAdmin } from "@/lib/supabase-server";
 import { isMissingSchema } from "@/lib/admin/schema";
 import { sendApns, type ApnsEnvironment, type ApnsResult } from "./apns";
+import { groupByEnvironment } from "./apns-payload";
 
 export type NotificationKind = "request" | "unsent" | "overdue" | "pickups";
 
@@ -100,7 +101,7 @@ export async function notifyAdmins(input: NotifyInput) {
   if (!devices.length) return { sent: 0, skipped: false };
 
   const [badge, summary] = await Promise.all([pendingRequestCount(), opsSummary()]);
-  const results = await sendApns(devices.map((device) => device.apns_token), {
+  const payload = {
     title: input.title,
     body: input.body,
     badge,
@@ -108,7 +109,16 @@ export async function notifyAdmins(input: NotifyInput) {
     threadId: input.kind,
     collapseId: input.dedupeKey,
     summary,
-  });
+  };
+  // One send per APNs host. A token from a debug build is only valid against
+  // sandbox and one from TestFlight only against production, so sending the
+  // whole list to a single host would fail half of them with BadDeviceToken —
+  // and the pruning below would then delete those phones as dead.
+  const results = (
+    await Promise.all(
+      groupByEnvironment(devices).map(([environment, tokens]) => sendApns(tokens, payload, environment)),
+    )
+  ).flat();
 
   // A plain `!result.ok` filter does not narrow the union, so predicate it.
   const failures = results.filter((result): result is Extract<ApnsResult, { ok: false }> => !result.ok);

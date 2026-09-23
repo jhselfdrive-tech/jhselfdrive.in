@@ -11,6 +11,16 @@
 // of them is a secret. DEVELOPMENT_TEAM is your 10-character Apple Team ID —
 // set it HERE rather than in the Xcode UI, which only applies it to one target
 // and leaves the widget and notification extension unsigned.
+//
+// Find the Team ID with:
+//
+//   security find-identity -v -p codesigning
+//   security find-certificate -c "<that identity>" -p | openssl x509 -noout -subject
+//
+// It is the **OU** field, NOT the code in parentheses in the certificate name —
+// those differ, and using the parenthetical one makes Xcode silently fall back
+// to your free Personal Team, which then reports that it "does not support the
+// Push Notifications capability".
 
 OPS_API_HOST = www.jhselfdrive.in
 

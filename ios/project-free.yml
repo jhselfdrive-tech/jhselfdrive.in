@@ -58,6 +58,7 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
+        DEVELOPMENT_TEAM: $(DEVELOPMENT_TEAM)
         OPS_API_HOST: $(OPS_API_HOST)
         OPS_API_SCHEME: $(OPS_API_SCHEME)
         SUPABASE_HOST: $(SUPABASE_HOST)

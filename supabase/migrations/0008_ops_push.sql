@@ -70,7 +70,10 @@ create extension if not exists pg_net;
 --   '*/30 * * * *',
 --   $$
 --     select net.http_post(
---       url := 'https://jhselfdrive.in/api/ops/cron',
+--       -- www, not the bare domain: jhselfdrive.in returns a 308 to www and
+--       -- pg_net does not follow redirects, so the job would look scheduled
+--       -- and silently never reach the route.
+--       url := 'https://www.jhselfdrive.in/api/ops/cron',
 --       headers := jsonb_build_object(
 --         'Content-Type', 'application/json',
 --         'x-ops-cron-secret', '<OPS_CRON_SECRET>'

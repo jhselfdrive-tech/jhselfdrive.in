@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import { generateKeyPairSync } from "node:crypto";
-import { buildApsBody, providerToken, resetProviderToken } from "./apns-payload";
+import { buildApsBody, groupByEnvironment, providerToken, resetProviderToken } from "./apns-payload";
 
 // A throwaway P-256 key, the curve APNs requires for ES256.
 const { privateKey } = generateKeyPairSync("ec", {
@@ -74,5 +74,32 @@ describe("buildApsBody", () => {
   it("carries the summary the widget renders", () => {
     const body = JSON.parse(buildApsBody({ title: "t", body: "b", summary: { pendingRequests: 3 } }));
     expect(body.summary).toEqual({ pendingRequests: 3 });
+  });
+});
+
+const device = (apns_token: string, environment: "sandbox" | "production") => ({ apns_token, environment });
+
+/**
+ * A token is only valid against the host that issued it. Sending one combined
+ * list to a single host fails the other half with BadDeviceToken, which
+ * notifyAdmins treats as permanently dead and deletes from admin_devices — so a
+ * mixed fleet would quietly unregister itself.
+ */
+describe("groupByEnvironment", () => {
+  it("splits a mixed fleet into one group per host", () => {
+    const groups = groupByEnvironment([
+      device("aa", "sandbox"),
+      device("bb", "production"),
+      device("cc", "sandbox"),
+    ]);
+    expect(Object.fromEntries(groups)).toEqual({ sandbox: ["aa", "cc"], production: ["bb"] });
+  });
+
+  it("emits a single group when every device agrees, so there is one send", () => {
+    expect(groupByEnvironment([device("aa", "sandbox"), device("bb", "sandbox")])).toEqual([["sandbox", ["aa", "bb"]]]);
+  });
+
+  it("emits nothing for no devices, rather than a group that would still open a session", () => {
+    expect(groupByEnvironment([])).toEqual([]);
   });
 });

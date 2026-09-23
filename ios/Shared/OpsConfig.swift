@@ -5,6 +5,20 @@ import Foundation
 enum OpsConfig {
     static let appGroup = "group.in.jhselfdrive.ops"
 
+    /// The App Group is also the Keychain access group, but the Keychain
+    /// requires it **team-prefixed** — `<TeamID>.group.in.jhselfdrive.ops`.
+    /// A bare app-group name is rejected at codesign, because a provisioning
+    /// profile only ever grants `<TeamID>.*`.
+    ///
+    /// The team comes from Config.xcconfig via Info.plist, like the hosts
+    /// below, so no team ID is hard-coded in source. On the free spec, where
+    /// no team is set, this degrades to the bare group and TokenStore falls
+    /// back to the app's private keychain.
+    static var keychainGroup: String {
+        let team = string("DEVELOPMENT_TEAM")
+        return team.isEmpty ? appGroup : "\(team).\(appGroup)"
+    }
+
     /// Values come from Config.xcconfig via Info.plist, so no host or key is
     /// hard-coded in source.
     static func string(_ key: String) -> String {

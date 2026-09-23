@@ -75,9 +75,28 @@ open JHOps.xcodeproj
 
 **Set `DEVELOPMENT_TEAM` in `Config.xcconfig`**, not just in the Xcode UI. The
 UI sets it on one target only, which is why the widget and notification
-extension report "requires a development team". Your Team ID is the
-10-character code in the Xcode Team dropdown, or at the top right of the
-developer portal.
+extension report "requires a development team".
+
+> **Getting the Team ID right.** A signing certificate carries *two* different
+> 10-character codes, and only one of them is the Team ID:
+>
+> ```
+> subject= CN=Apple Development: Your Name (X82C6JW39S), OU=NQW9XD522R, ...
+> #                                         not this        this one
+> ```
+>
+> The Team ID is the **OU** field. Read it with:
+>
+> ```sh
+> security find-identity -v -p codesigning
+> security find-certificate -c "<identity from above>" -p | openssl x509 -noout -subject
+> ```
+>
+> Using the parenthetical code instead matches no real team, so Xcode quietly
+> falls back to the free Personal Team and then refuses to build with
+> *"Personal development teams … do not support the Push Notifications
+> capability"* — an error that points at the capability rather than the actual
+> cause.
 
 `Config.xcconfig` holds two **hostnames**, the Supabase publishable key (both
 hosts and the key are already public in the website bundle) and your
@@ -119,6 +138,13 @@ than hand-written: the required bundle keys are then always present. Do not add
 - **Session sharing.** Tokens live in the Keychain under the App Group access
   group, not the app's private keychain. That is what lets the widget
   authenticate; a privately stored token leaves it permanently blank.
+  The Keychain wants that group **team-prefixed**
+  (`<TeamID>.group.in.jhselfdrive.ops`), because a provisioning profile only
+  ever grants `<TeamID>.*`. So the entitlements say
+  `$(AppIdentifierPrefix)group.in.jhselfdrive.ops` and `OpsConfig.keychainGroup`
+  rebuilds the same string at runtime from the team injected into Info.plist.
+  A bare app-group name there fails at codesign with *"doesn't match the
+  entitlements file's value for the keychain-access-groups entitlement"*.
 - **Widget freshness.** WidgetKit allows only ~40–70 timeline refreshes a day,
   so polling cannot keep the widget current. Each push carries the new counts
   and `JHOpsNotify` writes them to the App Group store and reloads the

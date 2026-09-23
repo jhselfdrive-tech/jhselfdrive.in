@@ -2,7 +2,8 @@ import Foundation
 import Security
 
 /// Supabase session tokens, stored in the Keychain under the **App Group
-/// access group** rather than the app's private keychain.
+/// access group** (team-prefixed, see `OpsConfig.keychainGroup`) rather than
+/// the app's private keychain.
 ///
 /// This is the specific thing that makes the widget work: a widget extension is
 /// a separate process with its own keychain, so a token saved privately by the
@@ -10,7 +11,7 @@ import Security
 enum TokenStore {
     private static let service = "in.jhselfdrive.ops.session"
     private static let account = "supabase"
-    private static let accessGroup = OpsConfig.appGroup
+    private static let accessGroup = OpsConfig.keychainGroup
 
     struct Session: Codable, Sendable {
         var accessToken: String

@@ -42,14 +42,25 @@ export function apnsConfig(): ApnsConfig | null {
  * not support it. The session is also closed and awaited before returning,
  * because a serverless function that returns early tears down the socket
  * mid-flight and the push is silently dropped.
+ *
+ * `environment` overrides the configured host for this batch. Tokens are issued
+ * per environment — a debug build's token is only valid against sandbox — so
+ * callers holding a mix must group by it and call once per group, or the
+ * mismatched half comes back BadDeviceToken and gets pruned as dead.
  */
-export async function sendApns(tokens: string[], payload: ApnsPayload): Promise<ApnsResult[]> {
+export async function sendApns(
+  tokens: string[],
+  payload: ApnsPayload,
+  environment?: ApnsEnvironment,
+): Promise<ApnsResult[]> {
   const config = apnsConfig();
   if (!config || !tokens.length) return [];
 
   const jwt = providerToken(config);
   const body = buildApsBody(payload);
-  const session = http2.connect(HOSTS[config.environment]);
+  // The provider JWT is signed from the team and key alone, so one token is
+  // valid against both hosts and the cache survives the switch.
+  const session = http2.connect(HOSTS[environment ?? config.environment]);
 
   try {
     await new Promise<void>((resolve, reject) => {

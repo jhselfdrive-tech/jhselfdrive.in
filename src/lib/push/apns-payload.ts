@@ -81,3 +81,27 @@ export function buildApsBody(payload: ApnsPayload) {
     ...(payload.summary ? { summary: payload.summary } : {}),
   });
 }
+
+/**
+ * Splits devices into one token list per APNs host.
+ *
+ * A token is only valid against the host that issued it: a debug build
+ * registers with sandbox, a TestFlight build with production. Sending one
+ * combined list to a single host fails the other half with BadDeviceToken,
+ * which the caller treats as permanently dead and deletes — so a mixed fleet
+ * would quietly unregister itself.
+ *
+ * `admin_devices.environment` is `not null` and check-constrained to exactly
+ * these two values, so every device lands in a group and none comes back empty.
+ */
+export function groupByEnvironment<T extends { apns_token: string; environment: ApnsEnvironment }>(
+  devices: T[],
+): [ApnsEnvironment, string[]][] {
+  const groups = new Map<ApnsEnvironment, string[]>();
+  for (const device of devices) {
+    const tokens = groups.get(device.environment);
+    if (tokens) tokens.push(device.apns_token);
+    else groups.set(device.environment, [device.apns_token]);
+  }
+  return [...groups];
+}

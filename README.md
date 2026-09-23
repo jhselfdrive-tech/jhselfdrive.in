@@ -45,6 +45,17 @@ The admin console reads Google Analytics through the GA4 Data API so traffic num
 
 Reports are cached for 15 minutes and the realtime counter for 1 minute, so the dashboard stays well inside the free GA4 API quota. Without these variables the console still works and the traffic panels show a setup note instead.
 
+### JH Ops iOS app
+
+A companion iPhone app and home-screen widget for running bookings: push
+notifications when a request lands or a return goes overdue, approve/decline,
+and WhatsApp the customer. It talks to the `/api/ops` routes in this repo.
+
+The app lives in [`ios/`](ios/) and is built with XcodeGen rather than a
+committed `.xcodeproj`. **See [`ios/README.md`](ios/README.md)** for the Apple
+Developer portal setup, the `APNS_*` server variables and the build steps — the
+widget and push both need a paid Apple Developer Program membership.
+
 ## Before launch
 
 - Confirm the business address, opening hours and service areas in `src/content/site.ts` match the Google Business Profile exactly.
