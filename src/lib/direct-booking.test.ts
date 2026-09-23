@@ -34,7 +34,11 @@ describe("directBookingSchema validation", () => {
     expect(result.success).toBe(false);
   });
 
-  it("rejects invalid Indian mobile numbers", () => {
+  it("accepts international mobiles with a country code", () => {
+    expect(directBookingSchema.parse({ ...validPayload, phone: "+44 7700 900123" }).phone).toBe("+447700900123");
+  });
+
+  it("rejects invalid mobile numbers", () => {
     const invalidPhone = {
       ...validPayload,
       phone: "12345",
@@ -109,4 +113,3 @@ describe("createCustomerBookingMessage", () => {
     expect(message).toContain("Temple trip");
   });
 });
-

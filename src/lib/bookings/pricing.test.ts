@@ -12,6 +12,10 @@ describe("calculateBookingDays", () => {
     expect(calculateBookingDays(ist(1, "09:00"), ist(2, "09:00"))).toBe(1);
   });
 
+  it("charges two days from the 23rd to the 25th at the same time", () => {
+    expect(quoteRental(2500, ist(23, "09:00"), ist(25, "09:00"))).toEqual({ days: 2, amountTotal: 5000 });
+  });
+
   it("rounds any part-day beyond 24 hours up to the next day", () => {
     expect(calculateBookingDays(ist(1, "09:00"), ist(2, "09:01"))).toBe(2);
     expect(calculateBookingDays(ist(1, "09:00"), ist(2, "18:00"))).toBe(2);

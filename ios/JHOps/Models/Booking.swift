@@ -1,5 +1,12 @@
 import Foundation
 
+extension Date {
+    /// Date pickers show minutes; hidden seconds must not add a rental day.
+    var bookingMinute: Date {
+        Date(timeIntervalSince1970: floor(timeIntervalSince1970 / 60) * 60)
+    }
+}
+
 struct BookingRow: Codable, Identifiable, Hashable, Sendable {
     let id: String
     let status: String

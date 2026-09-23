@@ -4,6 +4,14 @@ import ImageIO
 import UniformTypeIdentifiers
 @main struct ModelChecks {
     static func main() throws {
+        // Same displayed time on the 23rd/25th, different invisible seconds.
+        let pickup = try Date("2026-09-23T09:00:01+05:30", strategy: .iso8601)
+        let returning = try Date("2026-09-25T09:00:59+05:30", strategy: .iso8601)
+        precondition(ceil(returning.timeIntervalSince(pickup) / 86400) == 3)
+        precondition(ceil(returning.bookingMinute.timeIntervalSince(pickup.bookingMinute) / 86400) == 2)
+        precondition(pickup.bookingMinute.ISO8601Format().hasSuffix(":00Z"))
+        precondition(pickup.bookingMinute.addingTimeInterval(86400).timeIntervalSince(pickup.bookingMinute) == 86400)
+        precondition(ceil(returning.bookingMinute.addingTimeInterval(60).timeIntervalSince(pickup.bookingMinute) / 86400) == 3)
         precondition(OpsConfig.url(host:"https:",scheme:"https") == nil)
         precondition(OpsConfig.url(host:"https://example.supabase.co",scheme:"https") == nil)
         precondition(OpsConfig.url(host:"example.supabase.co",scheme:"https")?.host == "example.supabase.co")
@@ -40,6 +48,6 @@ import UniformTypeIdentifiers
         precondition(properties[kCGImagePropertyGPSDictionary] == nil)
         precondition(jpeg.count <= 3_500_000)
         precondition(downscale(Data("invalid image".utf8)) == nil)
-        print("Swift checks passed: old detail compatibility, dates, cache coding, multipart bytes, JPEG size/type and metadata stripping.")
+        print("Swift checks passed: rental minute precision, old detail compatibility, dates, cache coding, multipart bytes, JPEG size/type and metadata stripping.")
     }
 }

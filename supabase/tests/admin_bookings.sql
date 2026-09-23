@@ -1,4 +1,4 @@
--- Run in a disposable database after migrations 0001–0009. Entire fixture rolls back.
+-- Run in a disposable database after all migrations. Entire fixture rolls back.
 begin;
 do $$
 declare
@@ -31,6 +31,16 @@ begin
   perform * from public.record_admin_booking(v_vehicle,'2035-02-01','2035-02-02','ongoing','ops@example.test',p_phone=>'+919999999991',p_full_name=>'Updated Name');
   select count(*) into v_count from public.customers where phone='+919999999991';
   if v_count <> 1 then raise exception 'Customer upsert duplicated identity'; end if;
+  select * into v_row from public.record_admin_booking(v_vehicle,'2035-08-23T09:00:00+05:30','2035-08-25T09:00:00+05:30','approved','ops@example.test',p_phone=>'+447700900123');
+  if v_row.days <> 2 or v_row.amount_total <> 2469 then raise exception 'Exact 48-hour booking must charge two days'; end if;
+  if not exists(select 1 from public.customers where id=v_row.customer_id and phone='+447700900123') then raise exception 'International admin customer missing'; end if;
+  update public.vehicles set status='active',is_bookable=true where id=v_vehicle;
+  select * into v_row from public.record_vehicle_booking('+12025550123','International Customer','New York',v_vehicle,'2035-09-23T09:00:00+05:30','2035-09-25T09:00:00+05:30');
+  if v_row.days <> 2 or not exists(select 1 from public.customers where id=v_row.customer_id and phone='+12025550123') then raise exception 'International public booking failed'; end if;
+  begin
+    insert into public.customers(phone) values('+0123456789');
+    raise exception 'Expected invalid international phone rejection';
+  exception when check_violation then null; end;
   insert into public.vehicle_blocks(vehicle_id,start_at,end_at,reason,created_by) values(v_vehicle,'2035-04-01','2035-04-03','Service','ops@example.test');
   begin
     perform * from public.record_admin_booking(v_vehicle,'2035-04-01','2035-04-02','approved','ops@example.test',p_customer_id=>v_customer);

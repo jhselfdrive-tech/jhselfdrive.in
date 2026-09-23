@@ -1,12 +1,12 @@
 import { z } from 'zod';
 import { site } from '@/content/site';
-import { normalizeIndianPhone } from '@/lib/phone';
+import { normalizePhone } from '@/lib/phone';
 const text = (max: number) => z.string().trim().max(max).default('');
 export const timestamp = z.iso.datetime({ offset: true });
 export const rangeSchema = z.object({ startAt: timestamp, endAt: timestamp }).refine(v => new Date(v.endAt) > new Date(v.startAt), { message: 'Return must be after pickup.' });
 export const quoteSchema = rangeSchema.safeExtend({ vehicleId: z.uuid() });
 export const bookingSchema = quoteSchema.safeExtend({
-  customerId: z.uuid().optional(), customer: z.object({ phone: z.string().trim().transform((value,ctx) => { const phone = normalizeIndianPhone(value); if (!phone) { ctx.addIssue({ code:'custom',message:'Enter a valid Indian mobile number.' }); return z.NEVER; } return phone; }), fullName: z.string().trim().min(1).max(120), city: text(100) }).optional(),
+  customerId: z.uuid().optional(), customer: z.object({ phone: z.string().trim().transform((value,ctx) => { const phone = normalizePhone(value); if (!phone) { ctx.addIssue({ code:'custom',message:'Enter a valid mobile number. Include + and the country code for international numbers.' }); return z.NEVER; } return phone; }), fullName: z.string().trim().min(1).max(120), city: text(100) }).optional(),
   status: z.enum(['approved','confirmed','ongoing','completed']),
   amountTotal: z.number().min(0).max(10_000_000).optional(), deposit: z.number().min(0).max(10_000_000).optional(), notes: text(4000),
 }).refine(v => Boolean(v.customerId) !== Boolean(v.customer), { message: 'Choose an existing customer or enter a new customer.' });

@@ -1,10 +1,10 @@
 import { z } from "zod";
-import { normalizeIndianPhone } from "./phone";
+import { normalizePhone } from "./phone";
 
-const indianPhone = z.string().trim().transform((value, ctx) => {
-  const phone = normalizeIndianPhone(value);
+const phoneNumber = z.string().trim().transform((value, ctx) => {
+  const phone = normalizePhone(value);
   if (!phone) {
-    ctx.addIssue({ code: "custom", message: "Enter a valid 10-digit Indian mobile number" });
+    ctx.addIssue({ code: "custom", message: "Enter a valid mobile number. Include + and the country code for international numbers." });
     return z.NEVER;
   }
   return phone;
@@ -39,7 +39,7 @@ export type AvailabilityInput = z.infer<typeof availabilitySchema>;
 /** A customer booking a specific physical vehicle for a specific window. */
 export const directBookingSchema = z.object({
   fullName: z.string().trim().min(2, "Enter your full name").max(100),
-  phone: indianPhone,
+  phone: phoneNumber,
   city: z.string().trim().max(100).optional().default("Ramanathapuram"),
   vehicleId: z.uuid({ error: "Choose a car" }),
   pickupAt: localDateTime,

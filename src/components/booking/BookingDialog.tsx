@@ -106,7 +106,8 @@ export function BookingDialog({ vehicle, pickupAt, returnAt, pickupLabel, return
           <div className="booking-dialog-row">
             <div className="booking-field">
               <label htmlFor="dialog-phone">WhatsApp number</label>
-              <input id="dialog-phone" name="phone" required inputMode="tel" autoComplete="tel" placeholder="98765 43210" />
+              <input id="dialog-phone" name="phone" required inputMode="tel" autoComplete="tel" maxLength={40} aria-describedby="dialog-phone-help" placeholder="+91 98765 43210" />
+              <small id="dialog-phone-help">Indian mobiles: 10 digits. International numbers: include the country code, e.g. +44 7700 900123.</small>
               {state.fieldErrors?.phone ? <small className="booking-error">{state.fieldErrors.phone[0]}</small> : null}
             </div>
             <div className="booking-field">
