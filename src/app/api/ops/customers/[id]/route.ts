@@ -1,0 +1,10 @@
+import { withAdmin } from '@/lib/ops/auth';
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+import { z } from 'zod';
+import { getCustomer,updateCustomerNotes,updateCustomerTags } from '@/lib/admin/data';
+import { customerRow,bookingRow } from '@/lib/ops/serialize';
+import type { Booking } from '@/lib/admin/data';
+import { body,routeId,json,ok,missing,type IdContext } from '@/lib/ops/http';
+export const GET = withAdmin<IdContext>(async (_r,_a,c) => { const d = await getCustomer(await routeId(c)); if (!d) return missing('Customer'); return json({ customer:customerRow(d.customer),bookings:d.bookings.map(b => bookingRow({ ...b,status:b.status as Booking['status'],customer:{id:d.customer.id,full_name:d.customer.full_name,phone:d.customer.phone} })) }); });
+export const PATCH = withAdmin<IdContext>(async (r,_a,c) => { const id = await routeId(c); const v = await body(r,z.object({ tags:z.array(z.string().trim().max(100)).max(30).optional(),notes:z.string().max(4000).optional() }).refine(v => v.tags !== undefined || v.notes !== undefined, 'Provide tags or notes')); if (v.tags) await updateCustomerTags(id,v.tags); if (v.notes !== undefined) await updateCustomerNotes(id,v.notes); return ok(); });

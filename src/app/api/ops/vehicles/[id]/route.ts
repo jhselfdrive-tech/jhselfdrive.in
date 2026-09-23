@@ -1,0 +1,11 @@
+import { withAdmin } from '@/lib/ops/auth';
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+import { getVehicle,updateVehicle,deleteVehicle } from '@/lib/admin/fleet';
+import { vehicleCard,bookingRow,first } from '@/lib/ops/serialize';
+import type { Booking } from '@/lib/admin/data';
+import { vehicleSchema,vehiclePatchSchema } from '@/lib/ops/schemas';
+import { body,routeId,json,ok,missing,type IdContext } from '@/lib/ops/http';
+export const GET = withAdmin<IdContext>(async (_r,_a,c) => { const d = await getVehicle(await routeId(c)); if (!d) return missing('Vehicle'); return json({ vehicle:vehicleCard(d.vehicle),utilisation:d.utilisation,revenue:d.revenue,photos:d.photos.map(p => ({ id:p.id,url:p.url,sortOrder:p.sort_order })),documents:d.documents.map(p => ({ id:p.id,docType:p.doc_type,provider:p.provider,referenceNumber:p.reference_number,issuedOn:p.issued_on,expiresOn:p.expires_on,notes:p.notes,url:p.signedUrl })),blocks:d.blocks.map(b => ({ id:b.id,startAt:b.start_at,endAt:b.end_at,reason:b.reason })),bookings:d.bookings.map(b => bookingRow({ ...b,status:b.status as Booking['status'],customer:first(b.customer) ? { ...first(b.customer)!,id:b.customer_id } : null })) }); });
+export const PATCH = withAdmin<IdContext>(async (r,_a,c) => { const id = await routeId(c); const current = await getVehicle(id); if (!current) return missing('Vehicle'); const patch = await body(r,vehiclePatchSchema); const input = vehicleSchema.parse(Object.fromEntries(Object.entries({ ...vehicleCard(current.vehicle),...patch }).filter(([,v]) => v !== null))); await updateVehicle(id,input); return ok(); });
+export const DELETE = withAdmin<IdContext>(async (_r,_a,c) => { await deleteVehicle(await routeId(c)); return ok(); });

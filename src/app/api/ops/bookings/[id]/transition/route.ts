@@ -1,4 +1,5 @@
-import { revalidatePath } from "next/cache";
+import { invalidateOps } from "@/lib/ops/http";
+import { opsError } from "@/lib/ops/errors";
 import { z } from "zod";
 import { withAdmin } from "@/lib/ops/auth";
 import { transitionBooking } from "@/lib/admin/data";
@@ -12,10 +13,6 @@ const schema = z.object({
   note: z.string().trim().max(1000).optional().default(""),
   vehicleId: z.union([z.literal(""), z.uuid()]).optional().default(""),
 });
-
-function errorCode(error: unknown) {
-  return typeof error === "object" && error && "code" in error ? String(error.code) : "";
-}
 
 /**
  * Approve / decline / advance a booking from the phone.
@@ -42,9 +39,7 @@ export const POST = withAdmin<Context>(async (request, _admin, { params }) => {
       vehicleId: parsed.data.vehicleId || undefined,
     });
     // Keep the web panel in step with what the phone just did.
-    revalidatePath("/admin");
-    revalidatePath("/admin/bookings");
-    revalidatePath(`/admin/bookings/${id}`);
+    invalidateOps();
 
     return Response.json({
       ok: true,
@@ -55,12 +50,7 @@ export const POST = withAdmin<Context>(async (request, _admin, { params }) => {
     });
   } catch (error) {
     console.error("Ops transition failed", error);
-    const code = errorCode(error);
-    const status = code === "ILLEGAL_TRANSITION" || code === "VEHICLE_REQUIRED" || code === "VEHICLE_UNAVAILABLE" ? 409 : 500;
-    const message = code === "ILLEGAL_TRANSITION" ? "That change is not allowed from the booking's current state."
-      : code === "VEHICLE_REQUIRED" ? "Assign a vehicle first."
-      : code === "VEHICLE_UNAVAILABLE" ? "That car is unavailable for these dates."
-      : "Could not update this booking.";
+    const { status, message, code } = opsError(error);
     return Response.json({ error: message, code }, { status });
   }
 });

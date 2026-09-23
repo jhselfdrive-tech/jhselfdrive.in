@@ -1,5 +1,6 @@
 "use server";
 
+import { opsError } from "@/lib/ops/errors";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -21,20 +22,7 @@ function toIstTimestamp(value: string) {
   return `${value}:00+05:30`;
 }
 
-function errorCode(error: unknown) {
-  return typeof error === "object" && error && "code" in error ? String(error.code) : "";
-}
-
-function transitionMessage(error: unknown) {
-  switch (errorCode(error)) {
-    case "ILLEGAL_TRANSITION": return "That status change is not allowed from the booking's current state. Reload the page and try again.";
-    case "VEHICLE_REQUIRED": return "Assign a vehicle before moving the booking to this status.";
-    case "VEHICLE_UNAVAILABLE": return "That car is unavailable or blocked for these dates.";
-    case "BOOKING_NOT_FOUND": return "That booking no longer exists.";
-    case "23P01": return "That car is already booked for those dates.";
-    default: return "Could not update this booking.";
-  }
-}
+function transitionMessage(error: unknown) { return opsError(error).message; }
 
 function revalidateBooking(id: string) {
   revalidatePath("/admin");

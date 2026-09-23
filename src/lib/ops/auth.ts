@@ -1,4 +1,6 @@
 import "server-only";
+import { ZodError } from "zod";
+import { opsError } from "./errors";
 import { AdminAuthError, verifyAdmin } from "@/lib/admin/auth";
 
 export type OpsAdmin = { id: string; email: string; fullName: string };
@@ -23,19 +25,26 @@ export function withAdmin<Ctx = unknown>(
   return async (request: Request, context: Ctx): Promise<Response> => {
     try {
       const admin = await verifyAdmin();
-      return await handler(request, admin, context);
+      const response = await handler(request, admin, context);
+      response.headers.set("cache-control", "no-store");
+      return response;
     } catch (error) {
       if (error instanceof AdminAuthError) {
-        return Response.json({ error: error.message }, { status: error.status });
+        return Response.json({ error: error.message }, { status: error.status, headers: { "cache-control": "no-store" } });
       }
       // A redirect escaping to here means some path still tried to send a
       // browser to the login page. Report it as auth rather than as a generic
       // failure, which is impossible to diagnose from the app.
       if (isRedirect(error)) {
-        return Response.json({ error: "Not signed in as an administrator" }, { status: 401 });
+        return Response.json({ error: "Not signed in as an administrator" }, { status: 401, headers: { "cache-control": "no-store" } });
       }
-      console.error("Ops API failed", error);
-      return Response.json({ error: "Request failed" }, { status: 500 });
+      if (error instanceof ZodError) return Response.json({ error: error.issues[0]?.message || "Invalid request", code: "INVALID_REQUEST" }, { status: 400, headers: { "cache-control": "no-store" } });
+      if (error instanceof Error && "status" in error && (error.status === 400 || error.status === 413)) {
+        return Response.json({ error: error.message }, { status: error.status, headers: { "cache-control": "no-store" } });
+      }
+      const failure = opsError(error);
+      if (failure.status === 500) console.error("Ops API failed", error);
+      return Response.json({ error: failure.message, code: failure.code }, { status: failure.status, headers: { "cache-control": "no-store" } });
     }
   };
 }

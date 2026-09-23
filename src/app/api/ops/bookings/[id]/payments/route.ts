@@ -1,0 +1,13 @@
+import { withAdmin } from '@/lib/ops/auth';
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+import { listPayments, recordPayment } from '@/lib/admin/payments';
+import { queueMessageForBooking } from '@/lib/admin/messages';
+import { getBookingDetail } from '@/lib/admin/bookings';
+import { paymentSummary } from '@/lib/admin/checklist';
+import { PAYMENT_METHOD_LABEL } from '@/lib/bookings/payments';
+import { paymentRow } from '@/lib/ops/serialize';
+import { paymentSchema } from '@/lib/ops/schemas';
+import { body, routeId, ok, json, missing, type IdContext } from '@/lib/ops/http';
+export const GET = withAdmin<IdContext>(async (_r,_a,c) => { const id = await routeId(c); const [rows,detail] = await Promise.all([listPayments(id),getBookingDetail(id)]); if (!detail) return missing('Booking'); return json({ payments: rows.map(paymentRow), summary: paymentSummary({ ...detail.checklist, amount_total: detail.booking.amount_total }) }); });
+export const POST = withAdmin<IdContext>(async (request,_a,c) => { const bookingId = await routeId(c); const v = await body(request,paymentSchema); const paymentId = await recordPayment({ bookingId,...v }); const queuedMessage = await queueMessageForBooking(bookingId,{ kind:'payment',paymentId,paymentKind:v.kind },{ amountPaid:v.amount,paymentMethod:PAYMENT_METHOD_LABEL[v.method] }); return ok({ paymentId,queuedMessage }); });

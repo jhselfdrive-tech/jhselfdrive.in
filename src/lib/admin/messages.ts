@@ -278,3 +278,15 @@ export async function dueReminders(): Promise<DueReminder[]> {
     `${candidate.bookingId}|${eventKey({ kind: "reminder", reminder: candidate.reminder, onDate: candidate.onDate })}`,
   ));
 }
+
+/** Shared by the web action and native route; queue before resolving. */
+export async function resolveReminder(input: { bookingId: string; reminder: ReminderKind; onDate: string; outcome: "sent" | "skipped" }) {
+  await verifyAdmin();
+  const { bookingId, reminder, onDate, outcome } = input;
+  const resolved = await bookingMessageContext(bookingId);
+  if (!resolved) throw Object.assign(new Error("PHONE_REQUIRED"), { code: "PHONE_REQUIRED" });
+  const queued = await queueMessage(bookingId, { kind: "reminder", reminder, onDate }, resolved.context, resolved.phone);
+  if (!queued) throw Object.assign(new Error("REMINDER_HANDLED"), { code: "REMINDER_HANDLED" });
+  if (outcome === "sent") await markMessageSent(queued.id);
+  else await markMessageSkipped(queued.id, "Dismissed from the dashboard");
+}

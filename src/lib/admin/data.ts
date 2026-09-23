@@ -1,4 +1,5 @@
 import "server-only";
+import { quoteRental } from "@/lib/bookings/pricing";
 import { getSupabaseAdmin } from "@/lib/supabase-server";
 import { verifyAdmin } from "./auth";
 import { deriveSegments, type Segment } from "./segments";
@@ -66,12 +67,22 @@ export async function getCustomer(id: string) {
   return { customer: mapCustomer(customerResult.data as Record<string, unknown>), bookings: bookingsResult.data || [] };
 }
 
-export async function listBookings(filters: { status?: string } = {}) {
+export async function listBookings(filters: { status?: string; search?: string; from?: string; to?: string; limit?: number; cursor?: { startAt: string; id: string } } = {}) {
   await verifyAdmin();
-  let query = getSupabaseAdmin().from("bookings").select("id,customer_id,enquiry_id,car_slug,vehicle_id,start_at,end_at,start_date,end_date,amount_total,deposit,deposit_returned,status,notes,created_by,created_at,customer:customers(id,full_name,phone),vehicle:vehicles(id,registration_number,display_name)").order("start_at", { ascending: false }).limit(250);
-  if (filters.status && filters.status !== "all") query = query.eq("status", filters.status);
+  const customerJoin = filters.search ? "customer:customers!inner(id,full_name,phone)" : "customer:customers(id,full_name,phone)";
+  let query = getSupabaseAdmin().from("bookings").select(`id,customer_id,enquiry_id,car_slug,vehicle_id,start_at,end_at,start_date,end_date,amount_total,deposit,deposit_returned,status,notes,created_by,created_at,${customerJoin},vehicle:vehicles(id,registration_number,display_name)` as const).order("start_at", { ascending: false }).order("id", { ascending: false }).limit(filters.limit ?? 250);
+  if (filters.status === "active") query = query.in("status", ["approved", "confirmed", "ongoing"]);
+  else if (filters.status === "upcoming") query = query.in("status", ["approved", "confirmed"]).gte("start_at", new Date().toISOString());
+  else if (filters.status && filters.status !== "all") query = query.eq("status", filters.status);
+  if (filters.search) {
+    const safe = filters.search.replace(/[^a-zA-Z0-9 +]/g, "");
+    query = query.or(`phone.ilike.%${safe}%,full_name.ilike.%${safe}%`, { referencedTable: "customer" });
+  }
+  if (filters.from) query = query.gt("end_at", filters.from);
+  if (filters.to) query = query.lt("start_at", filters.to);
+  if (filters.cursor) query = query.or(`start_at.lt.${filters.cursor.startAt},and(start_at.eq.${filters.cursor.startAt},id.lt.${filters.cursor.id})`);
   let { data, error } = await query;
-  if (isMissingSchema(error)) {
+  if (isMissingSchema(error) && !filters.search && !filters.from && !filters.to && !filters.cursor && !filters.limit) {
     let fallback = getSupabaseAdmin().from("bookings").select("id,customer_id,enquiry_id,car_slug,start_date,end_date,amount_total,deposit,deposit_returned,status,notes,created_by,created_at,customer:customers(id,full_name,phone)").order("start_date", { ascending: false }).limit(250);
     if (filters.status && filters.status !== "all") fallback = fallback.eq("status", filters.status);
     const legacy = await fallback;
@@ -142,9 +153,11 @@ export async function transitionBooking(input: {
 export async function setDepositReturned(bookingId: string, depositReturned: boolean) {
   const adminUser = await verifyAdmin();
   const admin = getSupabaseAdmin();
+  const { data: booking, error: bookingError } = await admin.from("bookings").select("status,deposit").eq("id", bookingId).maybeSingle();
+  if (bookingError) throw bookingError;
+  if (!booking) throw Object.assign(new Error("BOOKING_NOT_FOUND"), { code: "BOOKING_NOT_FOUND" });
   const { error } = await admin.from("bookings").update({ deposit_returned: depositReturned }).eq("id", bookingId);
   if (error) throw error;
-  const { data: booking } = await admin.from("bookings").select("status,deposit").eq("id", bookingId).maybeSingle();
   await admin.from("booking_status_events").insert({
     booking_id: bookingId,
     from_status: booking?.status || null,
@@ -316,4 +329,31 @@ export async function getDashboardMetrics(days = 56) {
     sources: [...sourceCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([label, value]) => ({ label, value })),
     vehicleRevenue: [...vehicleRevenue.values()].sort((a, b) => b.value - a.value).slice(0, 6),
   };
+}
+
+export async function quoteBooking(vehicleId: string, startAt: string, endAt: string) {
+  await verifyAdmin();
+  const { data, error } = await getSupabaseAdmin().from("vehicles").select("day_rate,deposit").eq("id", vehicleId).maybeSingle();
+  if (error) throw error;
+  if (!data) throw Object.assign(new Error("VEHICLE_NOT_FOUND"), { code: "VEHICLE_NOT_FOUND" });
+  return { ...quoteRental(Number(data.day_rate), startAt, endAt), dayRate: Number(data.day_rate), deposit: Number(data.deposit) };
+}
+export async function createAdminBooking(input: {
+  customerId?: string; customer?: { phone: string; fullName: string; city: string };
+  vehicleId: string; startAt: string; endAt: string; status: "approved" | "confirmed" | "ongoing" | "completed";
+  amountTotal?: number; deposit?: number; notes: string;
+}) {
+  const admin = await verifyAdmin();
+  const { data, error } = await getSupabaseAdmin().rpc("record_admin_booking", {
+    p_customer_id: input.customerId ?? null, p_phone: input.customer?.phone ?? null,
+    p_full_name: input.customer?.fullName ?? null, p_city: input.customer?.city ?? null,
+    p_vehicle_id: input.vehicleId, p_start_at: input.startAt, p_end_at: input.endAt,
+    p_status: input.status, p_created_by: admin.email, p_amount_total: input.amountTotal ?? null,
+    p_deposit: input.deposit ?? null, p_notes: input.notes,
+  });
+  if (error) throw error;
+  const row = data?.[0];
+  if (!row) throw new Error("Booking was not returned");
+  return { bookingId: row.booking_id as string, customerId: row.customer_id as string,
+    amountTotal: Number(row.amount_total), deposit: Number(row.deposit), days: Number(row.days) };
 }

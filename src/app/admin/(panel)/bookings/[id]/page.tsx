@@ -1,3 +1,4 @@
+import { first } from "@/lib/ops/serialize";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AlertTriangle, CalendarClock, CircleDollarSign, ClipboardCheck, History, IndianRupee, MessageCircle, Route, ShieldCheck, UserRound } from "lucide-react";
@@ -24,9 +25,7 @@ import { isShareLinkUsable } from "@/lib/share/token";
 
 export const dynamic = "force-dynamic";
 
-function first<T>(value: T | T[] | null): T | null {
-  return Array.isArray(value) ? value[0] || null : value;
-}
+
 
 export default async function BookingDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

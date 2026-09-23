@@ -85,7 +85,7 @@ export async function getBookingMediaContext(id: string) {
   await verifyAdmin();
   const { data, error } = await getSupabaseAdmin().from("bookings").select("id,end_at").eq("id", id).maybeSingle();
   if (error) throw error;
-  if (!data) throw new Error("Booking not found");
+  if (!data) throw Object.assign(new Error("Booking not found"), { code: "BOOKING_NOT_FOUND" });
   return data;
 }
 
@@ -106,7 +106,7 @@ export async function rotateBookingShareLink(bookingId: string, requestedExpiry?
   const admin = getSupabaseAdmin();
   const { data: booking, error: bookingError } = await admin.from("bookings").select("end_at").eq("id", bookingId).maybeSingle();
   if (bookingError) throw bookingError;
-  if (!booking) throw new Error("Booking not found");
+  if (!booking) throw Object.assign(new Error("Booking not found"), { code: "BOOKING_NOT_FOUND" });
   const requested = requestedExpiry && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(requestedExpiry) ? `${requestedExpiry}:00+05:30` : requestedExpiry;
   const expiresAt = clampShareExpiry(requested || defaultShareExpiry(booking.end_at), booking.end_at);
   const token = generateShareToken();

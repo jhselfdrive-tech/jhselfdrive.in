@@ -1,0 +1,10 @@
+import { withAdmin } from '@/lib/ops/auth';
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+import { z } from 'zod';
+import { listVehicles,createVehicle } from '@/lib/admin/fleet';
+import { vehicleCard,first } from '@/lib/ops/serialize';
+import { vehicleSchema } from '@/lib/ops/schemas';
+import { body,json,ok } from '@/lib/ops/http';
+export const GET = withAdmin(async r => { const filters = z.object({ status:z.enum(['all','active','maintenance','retired','sold']).optional(),category:z.string().max(80).optional() }).parse(Object.fromEntries(new URL(r.url).searchParams)); const d = await listVehicles(filters); return json({ vehicles:d.vehicles.map(v => ({ ...vehicleCard(v),photoUrl:v.photoUrl,photoCount:v.photoCount,alertCount:v.documentAlerts.length,currentBooking:v.currentBooking ? { id:v.currentBooking.id,customerName:first(v.currentBooking.customer)?.full_name || 'Customer' } : null })) }); });
+export const POST = withAdmin(async r => ok({ vehicleId:await createVehicle(await body(r,vehicleSchema)) }));

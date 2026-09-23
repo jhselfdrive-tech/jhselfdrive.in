@@ -254,7 +254,7 @@ export async function addVehicleBlock(input: { vehicleId: string; startAt: strin
   if (error) throw error;
 }
 
-export async function findAvailableVehicles(categorySlug: string, startAt: string, endAt: string, excludeBookingId?: string) {
+export async function findAvailableVehicles(categorySlug: string | null, startAt: string, endAt: string, excludeBookingId?: string) {
   await verifyAdmin();
   const { data, error } = await getSupabaseAdmin().rpc("find_available_vehicles", {
     p_category_slug: categorySlug,

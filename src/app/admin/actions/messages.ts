@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { bookingMessageContext, markMessageSent, markMessageSkipped, queueMessage } from "@/lib/admin/messages";
+import { resolveReminder, markMessageSent, markMessageSkipped } from "@/lib/admin/messages";
 
 export type MessageActionState = { message?: string; success?: boolean };
 
@@ -54,14 +54,9 @@ const reminderSchema = z.object({
 export async function resolveReminderAction(_: MessageActionState, formData: FormData): Promise<MessageActionState> {
   const parsed = reminderSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { message: "Could not record that reminder." };
-  const { bookingId, reminder, onDate, outcome } = parsed.data;
+  const { bookingId, outcome } = parsed.data;
   try {
-    const resolved = await bookingMessageContext(bookingId);
-    if (!resolved) return { message: "That booking has no phone number to message." };
-    const queued = await queueMessage(bookingId, { kind: "reminder", reminder, onDate }, resolved.context, resolved.phone);
-    if (!queued) return { message: "That reminder was already handled." };
-    if (outcome === "sent") await markMessageSent(queued.id);
-    else await markMessageSkipped(queued.id, "Dismissed from the dashboard");
+    await resolveReminder(parsed.data);
   } catch (error) {
     console.error("Reminder resolution failed", error);
     return { message: "Could not record that reminder." };

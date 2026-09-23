@@ -1,20 +1,17 @@
 "use server";
 
-import { randomUUID } from "node:crypto";
+import { storeBookingMedia } from "@/lib/admin/media";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
-  addBookingMedia,
   deleteBookingMedia,
-  getBookingMediaContext,
   purgeExpiredMedia,
   revealLicenceMedia,
   revokeBookingShareLink,
   rotateBookingShareLink,
   saveHandover,
 } from "@/lib/admin/bookings";
-import { DOCUMENTS_BUCKET, IDENTITY_BUCKET, removeObjects, uploadObject } from "@/lib/admin/storage";
-import { MEDIA_LIMITS, objectKeyForMedia, validateUploads } from "@/lib/uploads/files";
+import { MEDIA_LIMITS, validateUploads } from "@/lib/uploads/files";
 import type { QueuedMessage } from "@/lib/admin/messages";
 
 export type HandoverActionState = { message?: string; success?: boolean; shareUrl?: string; queued?: QueuedMessage };
@@ -66,22 +63,11 @@ export async function uploadBookingMediaAction(_: HandoverActionState, formData:
   const limits = { ...MEDIA_LIMITS, maxFiles: parsed.data.mediaType === "vehicle_condition" ? 6 : 1 };
   const checked = validateUploads(files.map((file) => ({ name: file.name, size: file.size, type: file.type })), limits);
   if (!checked.ok) return { message: checked.errors[0] };
-  const context = await getBookingMediaContext(parsed.data.bookingId);
-  const purgeAfter = new Date(new Date(context.end_at).getTime() + 90 * 86_400_000).toISOString().slice(0, 10);
-  const bucket = parsed.data.mediaType === "vehicle_condition" ? DOCUMENTS_BUCKET : IDENTITY_BUCKET;
-  for (const file of files) {
-    const id = randomUUID();
-    const path = objectKeyForMedia(parsed.data.bookingId, parsed.data.phase, parsed.data.mediaType, id, file.type);
-    let uploaded = false;
-    try {
-      await uploadObject(bucket, path, await file.arrayBuffer(), file.type);
-      uploaded = true;
-      await addBookingMedia({ id, booking_id: parsed.data.bookingId, phase: parsed.data.phase, media_type: parsed.data.mediaType, bucket_id: bucket, file_path: path, file_name: file.name, file_mime: file.type, file_size_bytes: file.size, purge_after: purgeAfter });
-    } catch (error) {
-      if (uploaded) await removeObjects(bucket, [path]).catch(() => undefined);
-      console.error("Booking media upload failed", error);
-      return { message: parsed.data.mediaType.startsWith("licence") ? "That licence slot may already have a file. Delete it before replacing." : "Could not upload all selected photos." };
-    }
+  try {
+    for (const file of files) await storeBookingMedia({ ...parsed.data, file });
+  } catch (error) {
+    console.error("Booking media upload failed", error);
+    return { message: parsed.data.mediaType.startsWith("licence") ? "That licence slot may already have a file. Delete it before replacing." : "Could not upload all selected photos." };
   }
   revalidateBooking(parsed.data.bookingId);
   return { success: true, message: `${files.length} file${files.length === 1 ? "" : "s"} uploaded.` };
