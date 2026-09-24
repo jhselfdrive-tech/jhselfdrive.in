@@ -5,6 +5,7 @@ APP=${1:?Pass an app bundle}
 SPEC=${2:-full}
 SIGNING=${3:-signed}
 fail() { echo "FAIL: $*"; exit 1; }
+case "$SIGNING" in signed|archive|unsigned) ;; *) fail 'Signing mode must be signed, archive, or unsigned';; esac
 read_key() { /usr/libexec/PlistBuddy -c "Print :$2" "$1/Info.plist"; }
 VERSION=$(read_key "$APP" CFBundleShortVersionString)
 BUILD=$(read_key "$APP" CFBundleVersion)
@@ -32,14 +33,20 @@ for key in OPS_API_HOST SUPABASE_HOST; do
     [[ "$value" =~ ^[A-Za-z0-9.-]+(:[0-9]+)?$ ]] || fail "Invalid $key: use a hostname with an optional numeric port, without a URL scheme"
   fi
 done
-if [ "$SIGNING" = signed ] && [ "$SPEC" = full ]; then
+if [ "$SIGNING" != unsigned ] && [ "$SPEC" = full ]; then
   EXPECTED_APS=${EXPECTED_APS:-production}
   ENTITLEMENTS=$(mktemp)
   trap 'rm -f "$ENTITLEMENTS"' EXIT
   codesign -d --entitlements :- "$APP" >"$ENTITLEMENTS" 2>/dev/null
-  [ "$(/usr/libexec/PlistBuddy -c 'Print :aps-environment' "$ENTITLEMENTS")" = "$EXPECTED_APS" ] || fail 'Wrong APNs environment'
+  ACTUAL_APS=$(/usr/libexec/PlistBuddy -c 'Print :aps-environment' "$ENTITLEMENTS")
+  if [ "$SIGNING" = archive ]; then
+    case "$ACTUAL_APS" in development|production) ;; *) fail 'Missing archive APNs environment';; esac
+    echo 'Archive signing verified; production APNs must be verified after App Store export.'
+  else
+    [ "$ACTUAL_APS" = "$EXPECTED_APS" ] || fail 'Wrong APNs environment'
+  fi
   codesign --verify --deep --strict "$APP"
 else
-  echo 'Unsigned build: APNs codesign check deferred to the signed archive.'
+  echo 'Unsigned build: APNs codesign check deferred to the distribution IPA.'
 fi
 echo "Bundle verified: $VERSION ($BUILD) — $SPEC, $SIGNING"

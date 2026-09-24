@@ -159,13 +159,14 @@ than hand-written: the required bundle keys are then always present. Do not add
 
 The full paid spec uses team `NQW9XD522R`. Complete these account steps once:
 
-1. In App Store Connect, create an iOS app with bundle ID `in.jhselfdrive.ops`,
-   SKU `jh-ops-ios`, and English (India). Try the listing name “JH Ops”; use
-   “JH Self Drive Ops” if unavailable. The installed display name stays JH Ops.
+1. The [JH Ops app record](https://appstoreconnect.apple.com/apps/6815660759)
+   uses bundle ID and SKU `in.jhselfdrive.ops`, with English (U.K.) as its
+   primary language. Reuse this record for subsequent uploads.
 2. Verify Push Notifications + App Groups on the app ID, and App Groups on
    `.widget` and `.notify`, all using `group.in.jhselfdrive.ops`.
-3. Users and Access → Integrations → App Store Connect API: create an App
-   Manager API key. Save the once-downloadable key at
+3. For local releases, sign in to the paid team in Xcode → Settings → Accounts.
+   For automation, use an App Manager key from Users and Access → Integrations
+   → App Store Connect API. Save the once-downloadable key at
    `~/.appstoreconnect/private_keys/AuthKey_<KEYID>.p8`. An APNs key is a
    different credential and cannot upload builds. Keep private keys out of git.
 4. Fill App Privacy to match `Resources/PrivacyInfo.xcprivacy`: no tracking;
@@ -179,15 +180,17 @@ The full paid spec uses team `NQW9XD522R`. Complete these account steps once:
 From `ios/`, after committing the release sources:
 
 ```sh
-export ASC_KEY_ID=YOUR_KEY_ID
-export ASC_ISSUER_ID=YOUR_ISSUER_ID
-# Optional: ASC_KEY_PATH=/absolute/path/to/AuthKey_YOUR_KEY_ID.p8
+# Uses your signed-in Xcode account by default.
 ./release.sh
+# For API-key authentication, set ASC_KEY_ID and ASC_ISSUER_ID first.
+# Optional: ASC_KEY_PATH=/absolute/path/to/AuthKey_YOUR_KEY_ID.p8
 ```
 
 The script generates the full project, gates on a Release verification build,
-archives with automatic provisioning and the API key, verifies the signed
-archive, then exports with `destination: upload`. The account must have rights
+archives with automatic provisioning, exports and verifies a distribution IPA,
+then uploads through Xcode. A development-signed archive is normal: App Store
+export re-signs it with distribution profiles and production APNs. The production
+entitlement check therefore runs on the exported IPA. The account must have rights
 to create the Apple Distribution certificate and three App Store profiles.
 Confirm the resulting certificate with `security find-identity -v -p codesigning`.
 No fastlane or separate `altool` is required; if export upload is unavailable,
@@ -206,7 +209,7 @@ extension mismatch causes ITMS-90473; `verify-bundle.sh` fails before upload.
 `APS_ENVIRONMENT=development`; `Config.release.xcconfig` selects `production`.
 Do not edit the entitlements to switch environments. This setting must remain
 aligned with App/AppDelegate's `#if DEBUG` registration branch. An unsigned compile
-cannot prove the signed entitlement; release.sh checks it on the archive with
+cannot prove the signed entitlement; release.sh checks it on the exported IPA with
 `codesign`. Exempt encryption is declared in all three generated plists.
 
 Regenerate the icon from the repository root with
@@ -227,11 +230,12 @@ for the first build of each version. Allow review time and provide the demo logi
 
 ## Server rollout and contract checks
 
-Apply `supabase/migrations/0009_admin_bookings.sql` to the correct site project
+Apply migrations `0009_admin_bookings.sql` and `0010_international_customer_phones.sql` to the correct site project
 before deploying the server and distributing this app. It introduces an atomic
 customer-upsert + booking-insert RPC with a vehicle row lock. Admin availability
 now includes maintenance vehicles; public availability still requires an active,
-bookable vehicle. Completed rentals continue to reserve their historical dates.
+bookable vehicle. Migration 0010 allows international customer phone numbers.
+Completed rentals continue to reserve their historical dates.
 Existing `/api/ops/requests` and the original booking-detail keys remain intact.
 
 From the repository root:

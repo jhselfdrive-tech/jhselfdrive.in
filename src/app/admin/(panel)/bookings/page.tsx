@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, Filter } from "lucide-react";
+import { AlertTriangle, ArrowRight, Filter, Plus } from "lucide-react";
 import { BookingVehicleAssignment } from "@/components/admin/BookingVehicleAssignment";
 import { site } from "@/content/site";
 import { listBookings } from "@/lib/admin/data";
@@ -19,7 +19,7 @@ export default async function BookingsPage({ searchParams }: { searchParams: Pro
   const bookings = await listBookings({ status });
 
   return <>
-    <div className="admin-page-head"><div><span className="admin-overline">Rental records</span><h1>Bookings</h1><p>Requests, approvals, handovers and completed revenue.</p></div></div>
+    <div className="admin-page-head"><div><span className="admin-overline">Rental records</span><h1>Bookings</h1><p>Requests, approvals, handovers and completed revenue.</p></div><Link href="/admin/bookings/new" className="admin-primary-button"><Plus size={15} /> New booking</Link></div>
     {raw.created === "1" ? <p className="admin-form-success">Booking created.</p> : null}
     <form className="admin-filters">
       <div className="admin-filter">

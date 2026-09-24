@@ -1,8 +1,8 @@
 # JH Ops implementation / release status
 
-Updated 23 September 2026.
+Updated 24 September 2026.
 
-## Implemented locally
+## Implemented
 
 - Five-tab native app with booking creation and quoting, payments, assignment,
   deposit return, reminders, messages, handovers, camera/Photos JPEG uploads,
@@ -17,8 +17,9 @@ Updated 23 September 2026.
 
 ## Verified
 
-- 151 Vitest tests; ESLint; Next.js production build.
-- 88 live localhost HTTP checks: missing and garbage tokens rejected across all
+- 177 Vitest tests; ESLint; Next.js production build, including international
+  phone formatting and exact 48-hour pricing regressions.
+- 88 live production HTTP checks: missing and garbage tokens rejected across all
   44 admin method/route pairs. Authenticated live checks were not run without
   dedicated admin and non-admin smoke-account credentials.
 - PostgreSQL 17 isolated integration checks: migrations, RPC permissions, price
@@ -42,19 +43,32 @@ blank development-team overrides, added URL validation and bundle checks.
 Sign-in verifies admin access through the established summary endpoint so it
 works while the deployed server does not yet have the new meta endpoint.
 
-## Not released / remaining external checks
+## TestFlight upload
 
-- Apply migration 0009 to project `xqsaaqzooxmsikqgpfgb` and deploy the new server
-  code. The currently logged-in Supabase CLI account lists other projects, not
-  this one. Production `/api/ops/meta` currently returns 404.
-- Set Vercel's APNS_ENVIRONMENT fallback to production; device-specific routing
-  already handles sandbox and production together.
-- Provide the ASC App Manager API key path, Key ID and Issuer ID, then verify the
-  ASC record, privacy questionnaire, distribution profiles and upload. No
-  TestFlight upload or tester invitation has been performed.
+- App Store Connect record: [JH Ops](https://appstoreconnect.apple.com/apps/6815660759),
+  bundle ID/SKU `in.jhselfdrive.ops`, English (U.K.).
+- Version **1.1 (24)** archived from commit `0b4592a` and uploaded successfully
+  on 24 September 2026 at 18:13 IST using the existing Xcode Apple account.
+  Xcode reported `Upload succeeded` and `EXPORT SUCCEEDED`.
+- Distribution IPA: `ios/build/export-24/JHOps.ipa`. Signature, production APNs,
+  three matching versions, icons and privacy manifests verified on the exported
+  package. Automatic signing uses development entitlements in the archive and
+  re-signs with production entitlements during App Store export.
+- Release script now supports either the signed-in Xcode account or an API key,
+  and verifies the distribution IPA before uploading.
+- Internal group `internal` exists. Processing completion and assignment of the
+  build and account-holder tester still need confirmation in App Store Connect.
+
+## Remaining external checks
+
+- Migrations 0009 and 0010 and the server changes are deployed. All 44 admin
+  route/method pairs now reject unauthenticated requests with 401 rather than 404.
+- App privacy, review metadata and public App Store submission are not complete;
+  this release is for TestFlight testing.
 - Run authenticated mutation/409/media smoke checks against staging and complete
   physical-device camera, widget, cold/warm push, sign-out unregistration and
   cross-surface verification. New feature screens need the deployed APIs.
 - TestFlight clean-device production-push acceptance and friend testing remain.
 
-See README.md for commands and setup. The source changes are uncommitted for review.
+See README.md for commands and setup. Release-script and documentation updates
+remain uncommitted for review; the uploaded app sources are committed.

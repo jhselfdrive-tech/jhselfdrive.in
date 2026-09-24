@@ -16,7 +16,7 @@ export default async function AdminPanelLayout({ children }: { children: React.R
       <div className="admin-side-bottom"><a href="/" target="_blank" rel="noreferrer"><ExternalLink size={17} /> View website</a><form action={signOutAction}><button type="submit"><LogOut size={17} /> Sign out</button></form></div>
     </aside>
     <div className="admin-content">
-      <header className="admin-topbar"><div className="admin-workspace-label"><CarFront size={19} /><span>JH Operations <small>Ramanathapuram</small></span></div><div className="admin-topbar-actions"><Link className="admin-quick-booking" href="/admin/bookings"><Plus size={16} /> Bookings</Link><div className="admin-user"><span>{admin.fullName}</span><small>{admin.email}</small></div><form className="admin-mobile-signout" action={signOutAction}><button type="submit" aria-label="Sign out"><LogOut size={18} /></button></form></div></header>
+      <header className="admin-topbar"><div className="admin-workspace-label"><CarFront size={19} /><span>JH Operations <small>Ramanathapuram</small></span></div><div className="admin-topbar-actions"><Link className="admin-quick-booking" href="/admin/bookings/new"><Plus size={16} /> New booking</Link><div className="admin-user"><span>{admin.fullName}</span><small>{admin.email}</small></div><form className="admin-mobile-signout" action={signOutAction}><button type="submit" aria-label="Sign out"><LogOut size={18} /></button></form></div></header>
       <main className="admin-page">{children}</main>
       <AdminNavigation mobile />
     </div>

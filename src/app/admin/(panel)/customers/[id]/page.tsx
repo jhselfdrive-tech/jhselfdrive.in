@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { CarFront, Mail, MapPin, MessageCircle, Phone } from "lucide-react";
 import { updateCustomerNotesAction } from "@/app/admin/actions/customers";
 import { BookingForm } from "@/components/admin/BookingForm";
+import { initialBookingWindow } from "@/lib/bookings/admin-form";
 import { TagEditor } from "@/components/admin/TagEditor";
 import { site } from "@/content/site";
 import { getCustomer } from "@/lib/admin/data";
@@ -76,7 +77,7 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
         </section>
         <section className="admin-card">
           <div className="admin-card-head"><div><h2>Record a booking</h2><span className="admin-card-subtitle">For walk-in or phone rentals that did not come through the website.</span></div></div>
-          <BookingForm customerId={customer.id} />
+          <BookingForm customerId={customer.id} initialWindow={initialBookingWindow()} />
         </section>
       </div>
     </div>
