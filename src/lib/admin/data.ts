@@ -73,7 +73,18 @@ export async function listBookings(filters: { status?: string; search?: string; 
   let query = getSupabaseAdmin().from("bookings").select(`id,customer_id,enquiry_id,car_slug,vehicle_id,start_at,end_at,start_date,end_date,amount_total,deposit,deposit_returned,status,notes,created_by,created_at,${customerJoin},vehicle:vehicles(id,registration_number,display_name)` as const).order("start_at", { ascending: false }).order("id", { ascending: false }).limit(filters.limit ?? 250);
   if (filters.status === "active") query = query.in("status", ["approved", "confirmed", "ongoing"]);
   else if (filters.status === "upcoming") query = query.in("status", ["approved", "confirmed"]).gte("start_at", new Date().toISOString());
-  else if (filters.status && filters.status !== "all") query = query.eq("status", filters.status);
+  else if (filters.status === "overdue") query = query.eq("status","ongoing").lt("end_at",new Date().toISOString());
+  else if (filters.status === "pickups") {
+    const day = new Date(Date.now() + 330 * 60000).toISOString().slice(0,10);
+    const start = new Date(`${day}T00:00:00+05:30`);
+    query = query.in("status",["approved","confirmed"]).gte("start_at",start.toISOString()).lt("start_at",new Date(start.getTime()+86400000).toISOString());
+  } else if (filters.status === "messages") {
+    const due = await getSupabaseAdmin().from("booking_messages").select("booking_id").eq("status","due");
+    if (due.error) throw due.error;
+    const ids = [...new Set((due.data || []).map(row => row.booking_id))];
+    if (!ids.length) return [];
+    query = query.in("id",ids);
+  } else if (filters.status && filters.status !== "all") query = query.eq("status", filters.status);
   if (filters.search) {
     const safe = filters.search.replace(/[^a-zA-Z0-9 +]/g, "");
     query = query.or(`phone.ilike.%${safe}%,full_name.ilike.%${safe}%`, { referencedTable: "customer" });
@@ -356,4 +367,18 @@ export async function createAdminBooking(input: {
   if (!row) throw new Error("Booking was not returned");
   return { bookingId: row.booking_id as string, customerId: row.customer_id as string,
     amountTotal: Number(row.amount_total), deposit: Number(row.deposit), days: Number(row.days) };
+}
+
+export async function updateCustomerProfile(id: string, patch: import('zod').output<typeof import('@/lib/ops/schemas').customerPatchSchema>) {
+  await verifyAdmin();
+  const fields: Record<string,unknown> = {};
+  for (const [key,value] of Object.entries(patch)) {
+    fields[key === 'fullName' ? 'full_name' : key] = key === 'tags'
+      ? [...new Set((value as string[]).map(tag => tag.trim().toLowerCase().replace(/[^a-z0-9_-]/g,'')).filter(Boolean))].slice(0,12)
+      : value === '' ? null : value;
+  }
+  const {data,error} = await getSupabaseAdmin().from('customers').update(fields).eq('id',id).select('id').maybeSingle();
+  if (error?.code === '23505') throw Object.assign(new Error('CUSTOMER_PHONE_EXISTS'),{code:'CUSTOMER_PHONE_EXISTS'});
+  if (error) throw error;
+  if (!data) throw new Error('CUSTOMER_NOT_FOUND');
 }

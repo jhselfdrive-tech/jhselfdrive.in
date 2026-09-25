@@ -145,3 +145,13 @@ export async function purgeExpiredMedia() {
   }
   return data?.length || 0;
 }
+
+export async function updateBooking(id: string, patch: import('zod').output<typeof import('@/lib/ops/schemas').bookingPatchSchema>, actor: string) {
+  await verifyAdmin();
+  const { error } = await getSupabaseAdmin().rpc('update_admin_booking', {
+    p_booking_id:id,p_actor:actor,p_start_at:patch.startAt,p_end_at:patch.endAt,
+    p_vehicle_id:patch.vehicleId,p_customer_id:patch.customerId,p_amount_total:patch.amountTotal,
+    p_deposit:patch.deposit,p_notes:patch.notes,p_set_notes:Object.hasOwn(patch,'notes'),
+  });
+  if (error) throw error;
+}

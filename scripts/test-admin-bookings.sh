@@ -22,6 +22,7 @@ for migration in supabase/migrations/*.sql; do
   "${PSQL[@]}" -f "$TEST_ROOT/current.sql" >"$TEST_ROOT/migration.log" 2>&1 || { cat "$TEST_ROOT/migration.log"; exit 1; }
 done
 "${PSQL[@]}" -f supabase/tests/admin_bookings.sql
+"${PSQL[@]}" -f supabase/tests/booking_edits.sql
 # Two independent sessions compete for exactly the same vehicle/window.
 "${PSQL[@]}" -c "insert into vehicles(id,registration_number,category_slug,day_rate,deposit) values('00000000-0000-4000-8000-000000000001','RACE_TEST','city-hatchback',1000,5000)" >/dev/null
 race() { "${PSQL[@]}" -c "select * from record_admin_booking('00000000-0000-4000-8000-000000000001','2036-01-01','2036-01-02','approved','ops@example.test',p_phone=>'+91999999999$1');" >"$TEST_ROOT/race-$1.log" 2>&1; }
@@ -33,4 +34,13 @@ wait "$SECOND" || SECOND_RESULT=$?
 [ "$FIRST_RESULT" -ne "$SECOND_RESULT" ] || { cat "$TEST_ROOT"/race-*.log; echo 'Expected exactly one successful concurrent booking'; exit 1; }
 [ "$("${PSQL[@]}" -Atc "select count(*) from bookings where vehicle_id='00000000-0000-4000-8000-000000000001'")" = 1 ] || exit 1
 [ "$("${PSQL[@]}" -Atc "select count(*) from customers where phone in ('+919999999994','+919999999995')")" = 1 ] || exit 1
-echo 'Admin booking migration, rollback, grants, overlap and concurrency checks passed.'
+# A booking and a maintenance block must also serialize across the two tables.
+"${PSQL[@]}" -c "insert into vehicles(id,registration_number,category_slug,day_rate,deposit) values('00000000-0000-4000-8000-000000000002','BLOCK_RACE','city-hatchback',1000,5000)" >/dev/null
+"${PSQL[@]}" -c "begin; select id from vehicles where id='00000000-0000-4000-8000-000000000002' for update; select pg_sleep(0.25); insert into vehicle_blocks(vehicle_id,start_at,end_at,reason,created_by) values('00000000-0000-4000-8000-000000000002','2038-01-01','2038-01-02','Service','ops@example.test'); commit;" >"$TEST_ROOT/block-race.log" 2>&1 & BLOCK_PID=$!
+"${PSQL[@]}" -c "select * from record_admin_booking('00000000-0000-4000-8000-000000000002','2038-01-01','2038-01-02','approved','ops@example.test',p_phone=>'+919999999996');" >"$TEST_ROOT/booking-race.log" 2>&1 & BOOKING_PID=$!
+BLOCK_RESULT=0; BOOKING_RESULT=0
+wait "$BLOCK_PID" || BLOCK_RESULT=$?
+wait "$BOOKING_PID" || BOOKING_RESULT=$?
+[ "$BLOCK_RESULT" -ne "$BOOKING_RESULT" ] || { cat "$TEST_ROOT/block-race.log" "$TEST_ROOT/booking-race.log"; echo 'Expected exactly one booking or block reservation'; exit 1; }
+[ "$("${PSQL[@]}" -Atc "select (select count(*) from bookings where vehicle_id='00000000-0000-4000-8000-000000000002') + (select count(*) from vehicle_blocks where vehicle_id='00000000-0000-4000-8000-000000000002')")" = 1 ] || exit 1
+echo 'Admin booking creation/edits, rollback, grants, overlap, booking races and maintenance races passed.'

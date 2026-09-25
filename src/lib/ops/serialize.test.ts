@@ -8,7 +8,7 @@ describe('native serializers',() => {
   const customer = { id:'customer',full_name:'Meera',phone:'+919876543210' }, vehicle = { id:'car',display_name:'Swift',registration_number:'TN65AB1234' };
   const row = { id:'booking',status:'approved' as const,amount_total:2000,deposit:1000,customer,vehicle };
   expect(bookingRow(row)).toEqual(bookingRow({ ...row,customer:[customer],vehicle:[vehicle] }));
-  expect(bookingRow(row)).toMatchObject({ customerName:'Meera',vehicleLabel:'Swift',amountTotal:2000 });
+  expect(bookingRow(row)).toMatchObject({ customerName:'Meera',vehicleLabel:'Swift · TN65AB1234',amountTotal:2000 });
   expect(bookingRow(row)).not.toHaveProperty('customer');
  });
  it('handles absent joins',() => { expect(first([])).toBeNull(); expect(first(undefined)).toBeNull(); expect(bookingRow({ id:'b' })).toMatchObject({ customerName:'Unnamed customer',phone:'',vehicleLabel:null }); });

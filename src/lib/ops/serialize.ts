@@ -14,7 +14,7 @@ export function bookingRow(row: Omit<Partial<Booking>, 'customer' | 'vehicle'> &
     customerId: row.customer_id, vehicleId: row.vehicle_id, carSlug: row.car_slug,
     customerName: customer?.full_name || 'Unnamed customer', phone: customer?.phone || '',
     carLabel: site.fleet.find(car => car.slug === row.car_slug)?.name || row.car_slug,
-    vehicleLabel: vehicle?.display_name || vehicle?.registration_number || null,
+    vehicleLabel: vehicle ? [vehicle.display_name,vehicle.registration_number].filter(Boolean).join(" · ") : null,
     startAt: row.start_at, endAt: row.end_at, amountTotal: Number(row.amount_total || 0),
     deposit: Number(row.deposit || 0), createdAt: row.created_at,
     balance: row.checklist ? paymentSummary(row.checklist).balance : null };
@@ -35,7 +35,7 @@ export function bookingDetail(detail: NonNullable<Awaited<ReturnType<typeof getB
   return { id: row.id, status, statusLabel: STATUS_LABEL[status] || status,
     customerName: customer?.full_name || 'Unnamed customer', phone: customer?.phone || '', carLabel,
     vehicleLabel: vehicle ? `${vehicle.display_name || vehicle.model || carLabel} · ${vehicle.registration_number}` : null,
-    startAt: row.start_at, endAt: row.end_at, notes: row.notes, amountTotal: money.total, collected: money.collected, balance: money.balance, deposit: money.deposit,
+    startAt: row.start_at, endAt: row.end_at, notes: row.notes, amountTotal: money.total, collected: money.collected, balance: money.balance, deposit: money.deposit, depositRequired: Number(row.deposit || 0),
     actions: nextStatuses(status).map(to => ({ to, label: transitionLabel(status, to) })),
     customerId: row.customer_id, vehicleId: row.vehicle_id, carSlug: row.car_slug, depositReturned: row.deposit_returned,
     previousOdometerKm: vehicle?.odometer_km ?? null,

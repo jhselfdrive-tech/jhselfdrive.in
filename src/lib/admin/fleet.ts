@@ -244,7 +244,7 @@ export async function addVehicleDocument(input: {
 export async function addVehicleBlock(input: { vehicleId: string; startAt: string; endAt: string; reason: string }) {
   const adminUser = await verifyAdmin();
   const admin = getSupabaseAdmin();
-  const { data: conflicts, error: conflictError } = await admin.from("bookings").select("id").eq("vehicle_id", input.vehicleId).in("status", ["confirmed", "ongoing", "completed"]).lt("start_at", input.endAt).gt("end_at", input.startAt).limit(1);
+  const { data: conflicts, error: conflictError } = await admin.from("bookings").select("id").eq("vehicle_id", input.vehicleId).in("status", ["approved", "confirmed", "ongoing", "completed"]).lt("start_at", input.endAt).gt("end_at", input.startAt).limit(1);
   if (conflictError) throw conflictError;
   if (conflicts?.length) throw fleetError("This block overlaps an existing booking.", "VEHICLE_BOOKED");
   const { error } = await admin.from("vehicle_blocks").insert({
@@ -431,4 +431,43 @@ export async function deleteVehicle(vehicleId: string) {
     photoPaths.length ? removeObjects(PHOTOS_BUCKET, photoPaths).catch(() => undefined) : undefined,
     documentPaths.length ? removeObjects(DOCUMENTS_BUCKET, documentPaths).catch(() => undefined) : undefined,
   ]);
+}
+
+export async function updateVehicleBlock(id: string, patch: import('zod').output<typeof import('@/lib/ops/schemas').blockPatchSchema>) {
+  await verifyAdmin();
+  const admin = getSupabaseAdmin();
+  const {data:old,error:readError} = await admin.from('vehicle_blocks').select('*').eq('id',id).maybeSingle();
+  if (readError) throw readError;
+  if (!old) throw new Error('BLOCK_NOT_FOUND');
+  if (new Date(patch.endAt ?? old.end_at) <= new Date(patch.startAt ?? old.start_at)) throw new Error('INVALID_HANDOVER_RANGE');
+  const fields = Object.fromEntries(Object.entries(patch).map(([k,v]) => [k === 'startAt' ? 'start_at' : k === 'endAt' ? 'end_at' : k,v]));
+  // The database trigger checks overlap while holding the vehicle lock.
+  const {data,error} = await admin.from('vehicle_blocks').update(fields).eq('id',id).select('id').maybeSingle();
+  if (error?.code === '23514') throw new Error('INVALID_HANDOVER_RANGE');
+  if (error) throw error;
+  if (!data) throw new Error('BLOCK_NOT_FOUND');
+}
+export async function deleteVehicleBlock(id: string) {
+  await verifyAdmin();
+  const {error} = await getSupabaseAdmin().from('vehicle_blocks').delete().eq('id',id);
+  if (error) throw error;
+}
+export async function updateVehicleDocument(id: string, patch: import('zod').output<typeof import('@/lib/ops/schemas').documentPatchSchema>) {
+  await verifyAdmin();
+  const keys: Record<string,string> = {docType:'doc_type',referenceNumber:'reference_number',issuedOn:'issued_on',expiresOn:'expires_on'};
+  const fields = Object.fromEntries(Object.entries(patch).map(([k,v]) => [keys[k] ?? k,v === '' ? null : v]));
+  const {data,error} = await getSupabaseAdmin().from('vehicle_documents').update(fields).eq('id',id).select('id').maybeSingle();
+  if (error?.code === '23514') throw new Error('INVALID_DOCUMENT_RANGE');
+  if (error) throw error;
+  if (!data) throw new Error('DOCUMENT_NOT_FOUND');
+}
+export async function deleteVehicleDocument(id: string) {
+  await verifyAdmin();
+  const admin = getSupabaseAdmin();
+  const {data,error} = await admin.from('vehicle_documents').select('file_path').eq('id',id).maybeSingle();
+  if (error) throw error;
+  if (!data) return;
+  if (data.file_path) await removeObjects(DOCUMENTS_BUCKET,[data.file_path]);
+  const removed = await admin.from('vehicle_documents').delete().eq('id',id);
+  if (removed.error) throw removed.error;
 }

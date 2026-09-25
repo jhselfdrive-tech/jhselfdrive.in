@@ -60,3 +60,15 @@ export async function deletePayment(paymentId: string) {
   if (deleteError) throw deleteError;
   return data.booking_id as string;
 }
+
+export async function updatePayment(id: string, patch: import('zod').output<typeof import('@/lib/ops/schemas').paymentPatchSchema>) {
+  await verifyAdmin();
+  const admin = getSupabaseAdmin();
+  const {data:existing,error:readError} = await admin.from('booking_payments').select('id,handover_id').eq('id',id).maybeSingle();
+  if (readError) throw readError;
+  if (!existing) throw new Error('PAYMENT_NOT_FOUND');
+  if (existing.handover_id) throw new Error('PAYMENT_FROM_HANDOVER');
+  const {data,error} = await admin.from('booking_payments').update(patch).eq('id',id).is('handover_id',null).select('id').maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error('PAYMENT_NOT_FOUND');
+}

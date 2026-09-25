@@ -36,3 +36,25 @@ export const vehiclePatchSchema = z.record(z.string(),z.unknown()).transform((ra
   if (!result.success) { for (const issue of result.error.issues) ctx.addIssue({ code:"custom",message:issue.message,path:issue.path }); return z.NEVER; }
   return Object.fromEntries(Object.entries(result.data).filter(([key]) => Object.hasOwn(raw,key)));
 }).refine(v => Object.keys(v).length > 0, 'Provide vehicle fields to update.');
+
+/** PATCH defaults must never erase fields the caller omitted. */
+function sentFields<T extends z.ZodType>(schema: T) {
+  return z.record(z.string(),z.unknown()).transform((raw,ctx): z.output<T> => {
+    const result = schema.safeParse(raw);
+    if (!result.success) { for (const issue of result.error.issues) ctx.addIssue({ code:'custom',message:issue.message,path:issue.path }); return z.NEVER; }
+    return Object.fromEntries(Object.entries(result.data as Record<string,unknown>).filter(([key]) => Object.hasOwn(raw,key))) as z.output<T>;
+  }).refine(v => Object.keys(v as object).length > 0, 'Provide fields to update.');
+}
+export const bookingPatchSchema = sentFields(z.object({
+  startAt:timestamp.optional(), endAt:timestamp.optional(), vehicleId:z.uuid().optional(), customerId:z.uuid().optional(),
+  amountTotal:z.number().min(0).max(10_000_000).optional(), deposit:z.number().min(0).max(10_000_000).optional(), notes:text(4000).optional(),
+}).refine(v => !v.startAt || !v.endAt || new Date(v.endAt) > new Date(v.startAt), 'Return must be after pickup.'));
+export const customerPatchSchema = sentFields(z.object({
+  fullName:z.string().trim().min(1).max(120).optional(),
+  phone:bookingSchema.shape.customer.unwrap().shape.phone.optional(), city:text(100).optional(),
+  email:z.union([z.literal(''),z.email()]).optional(), tags:z.array(z.string().trim().max(100)).max(30).optional(), notes:text(4000).optional(),
+}));
+export const paymentPatchSchema = sentFields(paymentSchema.partial());
+export const blockPatchSchema = sentFields(z.object({ startAt:timestamp.optional(),endAt:timestamp.optional(),reason:z.string().trim().min(1).max(500).optional() })
+  .refine(v => !v.startAt || !v.endAt || new Date(v.endAt) > new Date(v.startAt), 'Return must be after pickup.'));
+export const documentPatchSchema = sentFields(z.object(documentSchema.shape).partial().refine(v => !v.issuedOn || !v.expiresOn || v.expiresOn >= v.issuedOn, 'Expiry must be on or after issue date.'));
